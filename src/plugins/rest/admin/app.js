@@ -125,7 +125,7 @@ function disconnect(message = '') {
   $('#disconnect').hidden = true;
   $('#connection-state').replaceChildren(h('span', { className: 'small-dot muted-dot' }), '未登录');
   $('#location-label').textContent = '登录';
-  for (const nav of [$('#nav-investigations'), $('#nav-targets')]) {
+  for (const nav of document.querySelectorAll('nav[aria-label="主导航"] a')) {
     nav.classList.remove('active');
     nav.setAttribute('aria-current', 'false');
   }
@@ -219,22 +219,27 @@ async function navigate() {
   resetView();
   const version = ++routeVersion;
   const [route, id] = nextRoute.split('/');
-  const isTargets = route === 'targets';
-  $('#nav-investigations').classList.toggle('active', !isTargets);
-  $('#nav-targets').classList.toggle('active', isTargets);
-  $('#nav-investigations').setAttribute('aria-current', !isTargets ? 'page' : 'false');
-  $('#nav-targets').setAttribute('aria-current', isTargets ? 'page' : 'false');
-  $('#location-label').textContent = isTargets
-    ? '目标配置'
-    : route === 'investigation'
-      ? '调查详情'
-      : '排障记录';
+  const section = ['targets', 'channels'].includes(route) ? route : 'investigations';
+  for (const name of ['investigations', 'targets', 'channels']) {
+    const nav = $('#nav-' + name);
+    nav.classList.toggle('active', section === name);
+    nav.setAttribute('aria-current', section === name ? 'page' : 'false');
+  }
+  $('#location-label').textContent =
+    section === 'channels'
+      ? '渠道信息'
+      : section === 'targets'
+        ? '目标配置'
+        : route === 'investigation'
+          ? '调查详情'
+          : '排障记录';
   content.replaceChildren(loading());
   try {
     if (/^targets(?:\/[A-Za-z][A-Za-z0-9_-]{0,127})?$/.test(nextRoute))
       await showTargets(id, version);
     else if (/^investigation\/[A-Za-z0-9_-]{1,128}$/.test(nextRoute)) await showDetail(id, version);
     else if (nextRoute === 'investigations') await showList(version);
+    else if (nextRoute === 'channels') await showChannels(version);
     else
       content.replaceChildren(
         h(
@@ -958,6 +963,87 @@ async function showDetail(id, version) {
   drawTurns();
   updateFollowupAccess();
   schedulePoll();
+}
+
+function copyButton(label, value) {
+  return button(
+    label,
+    async () => {
+      const session = sessionAbort;
+      try {
+        await navigator.clipboard.writeText(value);
+        if (session === sessionAbort && authenticated) toast('已复制');
+      } catch {
+        if (session === sessionAbort && authenticated) toast('复制失败，请选中文本手动复制。');
+      }
+    },
+    'text-button',
+  );
+}
+
+async function showChannels(version) {
+  const { channels } = await api('/api/channels');
+  if (version !== routeVersion) return;
+  const labels = {
+    appId: 'App ID',
+    botOpenId: '机器人 Open ID',
+    tenantId: '租户 ID',
+    conversationId: '会话 ID',
+    senderId: '发送人 ID',
+    domain: '平台',
+  };
+  const identity = (label, value) =>
+    h(
+      'div',
+      { className: 'config-item' },
+      smallLabel(label),
+      h(
+        'div',
+        { className: 'channel-identity' },
+        h('code', {}, value),
+        value.includes('[REDACTED]') ? null : copyButton('复制 ' + label, value),
+      ),
+    );
+  content.replaceChildren(
+    heading('渠道信息', '查看当前渠道的机器人身份和可用目标。', button('↻ 刷新渠道', navigate)),
+    h('div', { className: 'notice' }, '只读展示当前生效的渠道信息，不包含凭证。'),
+    channels.length
+      ? h(
+          'div',
+          { className: 'target-main' },
+          channels.map((channel) => {
+            const resources = { ...channel.scope.resources, ...channel.details };
+            return h(
+              'section',
+              { className: 'panel' },
+              h(
+                'div',
+                { className: 'target-title' },
+                h('h2', {}, channel.scope.instanceId),
+                h('span', { className: 'read-only' }, channel.scope.pluginId),
+              ),
+              h(
+                'div',
+                { className: 'target-content config-grid' },
+                h(
+                  'div',
+                  { className: 'config-item' },
+                  smallLabel('可用目标'),
+                  h('div', { className: 'channel-targets' }, channel.targets.map(targetLabel)),
+                ),
+                Object.entries(resources).map(([key, value]) =>
+                  identity(labels[key] || key, typeof value === 'string' ? value : json(value)),
+                ),
+              ),
+            );
+          }),
+        )
+      : h(
+          'section',
+          { className: 'panel' },
+          empty('没有可查看的渠道', '当前入口尚未获得目标访问权限。'),
+        ),
+  );
 }
 
 async function showTargets(selected, version) {

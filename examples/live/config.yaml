@@ -53,7 +53,7 @@ channels:
       # tenantId: REPLACE_TENANT_KEY
       # [可选] 不填时启动自动查询机器人身份；显式填写可跳过查询。
       # botOpenId: REPLACE_BOT_OPEN_ID
-    # [可选] 不配置routes：应用可收到的群/用户均可选择已登记目标。
+    # [可选] 不配置routes：应用可收到的群/发送者均可选择已登记目标。
     # 多个目标时须明确/target；每次调查只装配所选目标的配置和工具。
     # routes: [] 表示不授权任何来源且不启动渠道接收。
     # 若需限制，按需取消注释；以下字段都可省略，省略表示该项不限。
@@ -61,7 +61,7 @@ channels:
     #   - targets: [prod-a] # 不填默认全部已登记目标；[]表示本规则不授权目标。
     #     tenant: REPLACE_TENANT_KEY
     #     conversation: REPLACE_CHAT_ID
-    #     allowedSenders: [REPLACE_USER_OPEN_ID] # 不填不限用户；[]表示本规则不授权用户。
+    #     allowedSenders: [REPLACE_USER_OPEN_ID] # 用户或告警机器人Open ID；不填不限发送者，[]不授权。
   # 可选REST渠道：与lark并列；只用REST时删除lark整个实例及其routes。
   # http:
   #   plugin: rest

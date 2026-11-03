@@ -1,4 +1,5 @@
 import type { InvestigationReadAccess } from './investigations.js';
+import type { ChannelInfoReadAccess } from './channels.js';
 
 export type JsonValue = null | boolean | number | string | JsonObject | readonly JsonValue[];
 export interface JsonObject {
@@ -294,6 +295,8 @@ export interface RenderedMessage {
 }
 
 export interface MessageChannel {
+  /** Public runtime identity only; never return credentials or raw configuration. */
+  describe?(): JsonObject;
   /** Pure and synchronous; business text/report is redacted. Host checks chunks and saves investigation plans. */
   renderReply?(reply: ChannelReply, maxTextBytes: number): readonly RenderedMessage[];
   /** Cooperate with cancellation; never register reception after signal abortion. */
@@ -312,6 +315,7 @@ export interface MessageChannel {
 export interface ChannelReadAccess {
   authorizeInvestigation(principal: Principal, investigationId: string): void;
   readonly investigations?: InvestigationReadAccess;
+  readonly channels?: ChannelInfoReadAccess;
 }
 
 export type CapabilityKind = 'engine' | 'tools' | 'channel';

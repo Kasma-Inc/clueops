@@ -231,7 +231,7 @@ export class ToolRound {
           }
         : {}),
     });
-    const safeParameters = this.redactor.value(parameters) as JsonObject;
+    const safeParameters = this.redactor.value(parameters);
     const bytes = Buffer.byteLength(JSON.stringify({ ...result, parameters: safeParameters }));
     if (
       bytes > this.limits.maxResultBytes ||

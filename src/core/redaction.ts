@@ -1,4 +1,4 @@
-import type { JsonValue } from '../plugin-api/index.js';
+import type { JsonObject, JsonValue } from '../plugin-api/index.js';
 import { jsonValue } from '../plugin-api/index.js';
 
 export class Redactor {
@@ -31,6 +31,9 @@ export class Redactor {
       .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [REDACTED]')
       .replace(/(\w+:\/\/[^\s/:@]+:)[^\s@]+@/g, '$1[REDACTED]@');
   }
+  value(value: JsonObject): JsonObject;
+  value(value: readonly JsonValue[]): readonly JsonValue[];
+  value(value: unknown): JsonValue;
   value(value: unknown): JsonValue {
     const visit = (item: JsonValue): JsonValue => {
       if (typeof item === 'string') return this.text(item);

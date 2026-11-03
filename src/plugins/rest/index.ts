@@ -9,6 +9,7 @@ import type {
   ChannelReadAccess,
   MessageChannel,
   MessageHandler,
+  MessageHandlingResult,
   OutboundMessage,
   PluginContext,
 } from '../../plugin-api/index.js';
@@ -17,6 +18,7 @@ import { fingerprint } from '../../core/identity.js';
 import { credential, credentialSchema, object, privateRedactor, text } from '../shared.js';
 import { RestMailbox } from './mailbox.js';
 import { managementResponse, serveAdmin } from './management.js';
+import type { ManagementResponse } from './management.js';
 
 interface Config {
   readonly host?: string;
@@ -29,7 +31,12 @@ interface Config {
   readonly senderId: string;
 }
 const digest = (value: string) => createHash('sha256').update(value).digest();
-const reply = (response: ServerResponse, status: number, value: unknown): void => {
+type RestResponse =
+  | ManagementResponse
+  | Awaited<ReturnType<RestMailbox['page']>>
+  | MessageHandlingResult
+  | { error: string };
+const reply = (response: ServerResponse, status: number, value: RestResponse): void => {
   if (response.destroyed) return;
   response.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -194,6 +201,7 @@ export class RestChannel implements MessageChannel {
           url,
           { ...this.#address, senderId: this.config.senderId },
           this.#readAccess?.investigations,
+          this.#readAccess?.channels,
         );
         return reply(response, 200, result);
       } catch (error) {

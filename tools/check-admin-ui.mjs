@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { mkdir } from 'node:fs/promises';
 import { serveAdmin } from '../dist/plugins/rest/management.js';
 
 // The preview serves only public assets. The browser script intercepts every data
@@ -40,6 +41,7 @@ function cli(args) {
   });
 }
 try {
+  await mkdir('output/playwright', { recursive: true });
   await cli(['open', `http://127.0.0.1:${server.address().port}/admin/`]);
   const result = await cli([
     'run-code',

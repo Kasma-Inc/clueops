@@ -6,7 +6,7 @@ import {
   WSClient,
   defaultHttpInstance,
 } from '@larksuiteoapi/node-sdk';
-import type { HttpInstance } from '@larksuiteoapi/node-sdk';
+import type { EventHandles, HttpInstance } from '@larksuiteoapi/node-sdk';
 import { definePlugin, validators } from '../../plugin-api/index.js';
 import type {
   ChannelMessage,
@@ -19,6 +19,13 @@ import { withDeadline } from '../../core/lifecycle.js';
 import { fingerprint } from '../../core/identity.js';
 import { credential, credentialSchema, object, privateRedactor, text } from '../shared.js';
 import { renderLarkReply } from './cards.js';
+
+export type LarkMessageEvent = Parameters<NonNullable<EventHandles['im.message.receive_v1']>>[0];
+
+interface BotInfoResponse {
+  code: number;
+  bot?: { open_id: string };
+}
 
 interface Identity {
   appId: string;
@@ -35,121 +42,91 @@ interface Config {
 }
 const quiet = { error() {}, warn() {}, info() {}, debug() {}, trace() {} };
 
-function messageText(type: string, serialized: string, strict = false): string | undefined {
-  let content: unknown;
-  try {
-    content = JSON.parse(serialized);
-  } catch {
-    return;
-  }
-  let value = '';
-  if (type === 'text') {
-    if (!object(content) || typeof content.text !== 'string') return;
-    value = content.text;
-  } else {
-    if (!object(content)) return;
-    const post = Array.isArray(content.content)
-      ? content
-      : Object.values(content).find((v) => object(v) && Array.isArray(v.content));
-    if (!object(post) || !Array.isArray(post.content)) return;
-    if (strict && post.content.some((row) => !Array.isArray(row))) return;
-    let unsupported = false;
-    value =
-      (typeof post.title === 'string' ? post.title + '\n' : '') +
-      post.content
-        .map((row) =>
-          Array.isArray(row)
-            ? row
-                .map((item) => {
-                  if (object(item)) {
-                    if (
-                      ['text', 'a', 'md', 'code_block'].includes(String(item.tag)) &&
-                      typeof item.text === 'string'
-                    )
-                      return item.tag === 'code_block' || item.tag === 'md'
-                        ? `\n${item.text}\n`
-                        : item.text;
-                    if (item.tag === 'at')
-                      return !strict
-                        ? ''
-                        : typeof item.user_name === 'string'
-                          ? `@${item.user_name}`
-                          : '@[提及]';
-                    if (item.tag === 'hr') return strict ? '\n---\n' : '';
-                    if (item.tag === 'emotion' && typeof item.emoji_type === 'string')
-                      return strict ? `:${item.emoji_type}:` : '';
-                  }
-                  unsupported = true;
-                  return '';
-                })
-                .join('')
-            : '',
-        )
-        .join('\n');
-    if (strict && unsupported) return;
-  }
-  return value;
-}
-
-export function normalizeLarkEvent(raw: unknown, identity: Identity): ChannelMessage | undefined {
+export function normalizeLarkEvent(
+  event: LarkMessageEvent,
+  identity: Identity,
+): ChannelMessage | undefined {
   if (
-    !object(raw) ||
-    raw.app_id !== identity.appId ||
-    typeof raw.tenant_key !== 'string' ||
-    !raw.tenant_key.length ||
-    (identity.tenantId !== undefined && raw.tenant_key !== identity.tenantId) ||
-    !object(raw.sender) ||
-    raw.sender.sender_type !== 'user' ||
-    (raw.sender.tenant_key !== undefined && raw.sender.tenant_key !== raw.tenant_key) ||
-    !object(raw.sender.sender_id) ||
-    typeof raw.sender.sender_id.open_id !== 'string' ||
-    !object(raw.message)
+    event.app_id !== identity.appId ||
+    typeof event.tenant_key !== 'string' ||
+    !event.tenant_key.length ||
+    (identity.tenantId !== undefined && event.tenant_key !== identity.tenantId) ||
+    !['user', 'bot'].includes(event.sender.sender_type) ||
+    (event.sender.tenant_key !== undefined && event.sender.tenant_key !== event.tenant_key) ||
+    !event.sender.sender_id?.open_id ||
+    event.sender.sender_id.open_id === identity.botOpenId
   )
     return;
-  const message = raw.message;
+  const message = event.message;
   if (
     message.chat_type !== 'group' ||
-    !['text', 'post'].includes(String(message.message_type)) ||
-    typeof message.content !== 'string' ||
+    !['text', 'post', 'interactive'].includes(message.message_type) ||
     Buffer.byteLength(message.content) > 131072
   )
     return;
-  const mentions = Array.isArray(message.mentions) ? message.mentions.filter(object) : [];
-  const addressed = mentions.filter((m) => object(m.id) && m.id.open_id === identity.botOpenId);
-  if (!addressed.length && !message.parent_id) return;
-  let value = messageText(String(message.message_type), message.content);
-  if (value === undefined) return;
-  for (const mention of addressed)
-    if (typeof mention.key === 'string') value = value.replaceAll(mention.key, '');
-  value = value.trim();
-  if (!value) {
-    if (!message.parent_id || !addressed.length) return;
-    value = '请分析引用的消息。';
-  }
-  const command =
-    /^\/(target|event|continue|cancel|status|retry-delivery)\s+([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/.exec(
-      value,
-    );
-  const fields: Record<string, string> = {};
-  if (command) {
-    fields[command[1] === 'target' ? 'targetId' : 'investigationId'] = command[2]!;
-    if (!['target', 'event'].includes(command[1]!)) fields.action = command[1]!;
-    value = command[3]?.trim() || (fields.action ? command[1]! : '');
-    if (!value) {
-      if (!message.parent_id || !addressed.length) return;
-      value = '请分析引用的消息。';
+  const addressed = (message.mentions ?? []).filter(
+    (mention) => mention.id.open_id === identity.botOpenId,
+  );
+  if (!addressed.length && (event.sender.sender_type === 'bot' || !message.parent_id)) return;
+  // Read explicit commands only; the model always receives the original content.
+  let command: RegExpExecArray | null = null;
+  if (message.message_type === 'text' || message.message_type === 'post') {
+    try {
+      const content: unknown = JSON.parse(message.content);
+      let input = '';
+      if (object(content) && message.message_type === 'text') {
+        if (typeof content.text === 'string') input = content.text;
+      } else if (object(content)) {
+        const post = Array.isArray(content.content)
+          ? content
+          : Object.values(content).find((value) => object(value) && Array.isArray(value.content));
+        if (object(post) && Array.isArray(post.content))
+          input = [
+            typeof post.title === 'string' ? post.title : '',
+            ...post.content.map((row) =>
+              Array.isArray(row)
+                ? row
+                    .filter(object)
+                    .filter((item) => ['text', 'a', 'md', 'code_block'].includes(String(item.tag)))
+                    .map((item) => (typeof item.text === 'string' ? item.text : ''))
+                    .join('')
+                : '',
+            ),
+          ].join('\n');
+      }
+      for (const mention of addressed) input = input.replaceAll(mention.key, '');
+      command =
+        /^\/(target|event|continue|cancel|status|retry-delivery)\s+([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/.exec(
+          input.trim(),
+        );
+    } catch {
+      // Unrecognized content still passes through unchanged as model input.
     }
+  }
+  let fields: Partial<Pick<ChannelMessage, 'targetId' | 'investigationId' | 'action'>> = {};
+  if (command) {
+    const name = command[1];
+    if (name === 'target') fields = { targetId: command[2]! };
+    else if (name === 'event') fields = { investigationId: command[2]! };
+    else if (
+      name === 'continue' ||
+      name === 'cancel' ||
+      name === 'status' ||
+      name === 'retry-delivery'
+    )
+      fields = { investigationId: command[2]!, action: name };
+    if (!command[3]?.trim() && !fields.action && (!message.parent_id || !addressed.length)) return;
   }
   try {
     return validators.channelMessage.parse({
       address: {
         channelInstanceId: identity.instanceId,
-        tenantId: raw.tenant_key,
+        tenantId: event.tenant_key,
         conversationId: message.chat_id,
       },
-      senderId: raw.sender.sender_id.open_id,
+      senderId: event.sender.sender_id.open_id,
       messageId: message.message_id,
-      text: value,
+      text: message.content,
       ...(typeof message.parent_id === 'string' && message.parent_id
         ? { replyToMessageId: message.parent_id }
         : {}),
@@ -167,19 +144,14 @@ export function createLarkDispatcher(
   readContext?: (message: ChannelMessage, signal: AbortSignal) => ReturnType<MessageContextReader>,
 ): EventDispatcher {
   return new EventDispatcher({ logger: quiet, loggerLevel: LoggerLevel.error }).register({
-    'im.message.receive_v1': async (raw) => {
+    'im.message.receive_v1': async (event) => {
       signal.throwIfAborted();
-      const message = normalizeLarkEvent(raw, identity);
+      const message = normalizeLarkEvent(event, identity);
       if (!message) return;
       // Let persistence errors reject: WSClient sends a non-200 ACK and the platform may redeliver.
       const explicitlyAddressed =
-        object(raw) &&
-        object(raw.message) &&
-        Array.isArray(raw.message.mentions) &&
-        raw.message.mentions.some(
-          (mention) =>
-            object(mention) && object(mention.id) && mention.id.open_id === identity.botOpenId,
-        );
+        event.message.mentions?.some((mention) => mention.id.open_id === identity.botOpenId) ??
+        false;
       await handler(
         message,
         !explicitlyAddressed
@@ -225,9 +197,10 @@ export default definePlugin<Config>({
     // Transport defaults also cover the SDK's token pre-requests.
     const http = defaultHttpInstance.create({ signal: abort.signal, timeout: 8000 });
     http.interceptors.response.use((response) => response.data);
-    const client = new Client({ ...clientOptions, httpInstance: http as unknown as HttpInstance });
+    const client = new Client({ ...clientOptions, httpInstance: http as HttpInstance });
     let ws: WSClient | undefined;
     let starting = false;
+    let currentBotOpenId = config.botOpenId;
     const check = (message: OutboundMessage) => {
       if (
         message.address.channelInstanceId !== context.instanceId ||
@@ -248,6 +221,7 @@ export default definePlugin<Config>({
         domain: 'lark',
       },
       channel: {
+        describe: () => (currentBotOpenId === undefined ? {} : { botOpenId: currentBotOpenId }),
         async start(handler, parent) {
           if (ws || starting) throw new HostError('CHANNEL_ALREADY_STARTED');
           parent.throwIfAborted();
@@ -260,7 +234,7 @@ export default definePlugin<Config>({
             if (botOpenId === undefined) {
               try {
                 const response = await withDeadline(
-                  client.request<unknown>({
+                  client.request<BotInfoResponse>({
                     method: 'GET',
                     url: '/open-apis/bot/v3/info',
                     signal,
@@ -271,10 +245,8 @@ export default definePlugin<Config>({
                 );
                 signal.throwIfAborted();
                 if (
-                  !object(response) ||
-                  response.code !== 0 ||
-                  !object(response.bot) ||
-                  typeof response.bot.open_id !== 'string' ||
+                  response?.code !== 0 ||
+                  typeof response.bot?.open_id !== 'string' ||
                   !response.bot.open_id.length
                 )
                   throw new HostError('LARK_BOT_IDENTITY_FAILED');
@@ -292,6 +264,7 @@ export default definePlugin<Config>({
               instanceId: context.instanceId,
               ...(config.tenantId !== undefined ? { tenantId: config.tenantId } : {}),
             };
+            currentBotOpenId = botOpenId;
             const readContext = async (message: ChannelMessage, contextSignal: AbortSignal) => {
               const lookupSignal = AbortSignal.any([
                 signal,
@@ -305,13 +278,14 @@ export default definePlugin<Config>({
               lookupHttp.interceptors.response.use((response) => response.data);
               const lookup = new Client({
                 ...clientOptions,
-                httpInstance: lookupHttp as unknown as HttpInstance,
+                httpInstance: lookupHttp as HttpInstance,
               });
               let response;
               try {
                 response = await withDeadline(
                   lookup.im.message.get({
                     path: { message_id: message.replyToMessageId! },
+                    params: { card_msg_content_type: 'user_card_content' },
                   }),
                   8000,
                   lookupSignal,
@@ -332,13 +306,11 @@ export default definePlugin<Config>({
                 !item.body?.content
               )
                 throw new HostError('QUOTED_MESSAGE_UNAVAILABLE');
-              if (!['text', 'post'].includes(item.msg_type ?? ''))
+              if (!['text', 'post', 'interactive'].includes(item.msg_type ?? ''))
                 throw new HostError('QUOTED_MESSAGE_UNSUPPORTED');
               if (Buffer.byteLength(item.body.content) > 131072)
                 throw new HostError('QUOTED_MESSAGE_TOO_LARGE');
-              const text = messageText(item.msg_type!, item.body.content, true);
-              if (!text?.trim()) throw new HostError('QUOTED_MESSAGE_UNSUPPORTED');
-              return { messageId: item.message_id, text };
+              return { messageId: item.message_id, text: item.body.content };
             };
             const ready = new Promise<void>((resolve, reject) => {
               ws = new WSClient({

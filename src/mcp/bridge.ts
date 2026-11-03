@@ -36,13 +36,13 @@ export async function openToolBridge(tools: readonly BoundDiagnosticTool[], pare
           tool.definition.name,
           {
             description: tool.definition.description,
-            inputSchema: fromJsonSchema<Record<string, unknown>>(schema),
+            inputSchema: fromJsonSchema<JsonObject>(schema),
             annotations: { readOnlyHint: tool.definition.readOnly },
           },
           async (args, context) => {
             signal.throwIfAborted();
             const evidence = await tool.call(
-              args as JsonObject,
+              args,
               AbortSignal.any([signal, context.mcpReq.signal]),
             );
             return {

@@ -608,8 +608,8 @@ export class InvestigationCoordinator {
             if (!(error instanceof ContractError)) throw error;
             report = undefined;
           } finally {
-            await withDeadline<unknown>(
-              iterator.return?.() ?? Promise.resolve(),
+            await withDeadline(
+              iterator.return?.().then(() => {}) ?? Promise.resolve(),
               this.host.runtime.cleanupTimeoutMs,
             ).catch(() => {});
           }
@@ -704,7 +704,7 @@ export class InvestigationCoordinator {
     const previous = this.history(current.request.investigationId).filter(
       (a) => a.sequence < current.sequence,
     );
-    const add = (value: unknown) => {
+    const add = (value: (typeof inputs)[number] | Evidence) => {
       const size = Buffer.byteLength(JSON.stringify(value)) + 1;
       if (bytes + size > this.host.runtime.maxTotalBytes) {
         truncated = true;

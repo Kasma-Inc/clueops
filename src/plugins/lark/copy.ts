@@ -35,7 +35,7 @@ const notices: Record<string, readonly [string, string]> = {
   ],
   QUOTED_MESSAGE_UNSUPPORTED: [
     '这条引用暂不支持读取',
-    '目前支持文本和富文本消息。请将图片、文件或卡片中的相关内容复制为文字，再发送给机器人。',
+    '目前支持文本、富文本和消息卡片。请将图片或文件中的相关内容复制为文字，再发送给机器人。',
   ],
   QUOTED_MESSAGE_TOO_LARGE: [
     '引用内容有点长',

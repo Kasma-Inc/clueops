@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { validators } from '../../plugin-api/index.js';
+import { compileContract, objectSchema, schemas } from '../../plugin-api/index.js';
 import type { OutboundMessage } from '../../plugin-api/index.js';
 import { HostError } from '../../core/errors.js';
 import { fingerprint } from '../../core/identity.js';
@@ -13,6 +13,13 @@ interface Entry {
   readonly cursor: number;
   readonly message: OutboundMessage;
 }
+const entryValidator = compileContract<Entry>(
+  objectSchema({
+    cursor: { type: 'integer', minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
+    message: schemas.outboundMessage,
+  }),
+  'REST mailbox entry',
+);
 async function sync(directory: string): Promise<void> {
   const handle = await open(directory, 'r');
   try {
@@ -79,11 +86,9 @@ export class RestMailbox {
     const info = await lstat(file);
     if (!info.isFile() || info.size > maximumBytes) throw new HostError('REST_MAILBOX_INVALID');
     try {
-      const value = JSON.parse(await readFile(file, 'utf8')) as Entry;
-      if (!Number.isSafeInteger(value.cursor) || value.cursor < 1) throw new Error();
-      const message = validators.outboundMessage.parse(value.message);
-      if (fingerprint(message.idempotencyKey) !== id) throw new Error();
-      return { cursor: value.cursor, message };
+      const entry = entryValidator.parse(JSON.parse(await readFile(file, 'utf8')));
+      if (fingerprint(entry.message.idempotencyKey) !== id) throw new Error();
+      return entry;
     } catch {
       throw new HostError('REST_MAILBOX_INVALID');
     }

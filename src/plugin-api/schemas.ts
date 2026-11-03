@@ -7,7 +7,6 @@ import type {
   InvestigationRequest,
   InvestigationScope,
   JsonObject,
-  JsonSchema,
   PluginManifest,
   TargetSnapshot,
   ToolDefinition,
@@ -33,7 +32,7 @@ const schemaObject = { anyOf: [{ type: 'boolean' }, { type: 'object' }] } as con
 export function objectSchema(
   properties: JsonObject,
   required: readonly string[] = Object.keys(properties),
-): JsonSchema {
+): JsonObject {
   return { type: 'object', properties, required, additionalProperties: false };
 }
 
@@ -120,11 +119,11 @@ const failureConsistency = {
   else: { properties: { failure }, required: ['failure'] },
 };
 const queryResult = {
-  ...(objectSchema(resultProperties, resultRequired) as JsonObject),
+  ...objectSchema(resultProperties, resultRequired),
   ...failureConsistency,
 };
 const evidence = {
-  ...(objectSchema(
+  ...objectSchema(
     {
       ...resultProperties,
       id: text,
@@ -147,7 +146,7 @@ const evidence = {
       'parameters',
       'observedAt',
     ],
-  ) as JsonObject),
+  ),
   ...failureConsistency,
 };
 

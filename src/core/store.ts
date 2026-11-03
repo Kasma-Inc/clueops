@@ -395,7 +395,7 @@ export class InvestigationStore {
 
   private async publish(
     file: string,
-    value: unknown,
+    value: Acceptance | TurnState | Evidence | Delivery | OutputPlan | PrunePlan,
     immutable: boolean,
     probe = false,
   ): Promise<boolean> {
@@ -408,7 +408,7 @@ export class InvestigationStore {
   }
   private async publishValue(
     file: string,
-    value: unknown,
+    value: Acceptance | TurnState | Evidence | Delivery | OutputPlan | PrunePlan,
     immutable: boolean,
     probe = false,
   ): Promise<boolean> {

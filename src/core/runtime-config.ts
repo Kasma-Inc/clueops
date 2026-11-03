@@ -1,5 +1,3 @@
-import type { JsonObject } from '../plugin-api/index.js';
-
 export const runtimeDefaults = Object.freeze({
   stateDirectory: '.clueops/state',
   retentionDays: 7,
@@ -44,5 +42,5 @@ export const runtimeSchema = {
       ]),
     ),
     maxModelTokens: { type: 'integer', minimum: 1, maximum: 3600000 },
-  } as JsonObject,
+  },
 };

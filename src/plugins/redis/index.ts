@@ -1,5 +1,5 @@
 import { access } from 'node:fs/promises';
-import { definePlugin, objectSchema } from '../../plugin-api/index.js';
+import { definePlugin, jsonValue, objectSchema } from '../../plugin-api/index.js';
 import type { JsonValue } from '../../plugin-api/index.js';
 import { HostError } from '../../core/errors.js';
 import { mcpProvider } from '../../mcp/process.js';
@@ -44,21 +44,28 @@ interface Config {
 }
 
 // FastMCP wraps scalar results in {result: ...}; older envelopes use text blocks.
-function decode(value: unknown): JsonValue {
+function decode(value: JsonValue): JsonValue {
   if (Array.isArray(value)) {
-    if (value.length === 1 && object(value[0]) && value[0].type === 'text') {
-      const text = value[0].text as string;
+    if (
+      value.length === 1 &&
+      object(value[0]) &&
+      value[0].type === 'text' &&
+      typeof value[0].text === 'string'
+    ) {
+      const text = value[0].text;
+      let parsed: unknown;
       try {
-        return JSON.parse(text) as JsonValue;
+        parsed = JSON.parse(text);
       } catch {
         return text;
       }
+      return jsonValue(parsed);
     }
-    return value as JsonValue;
+    return value;
   }
   return object(value) && Object.keys(value).length === 1 && 'result' in value
     ? value.result!
-    : (value as JsonValue);
+    : value;
 }
 
 // The pinned upstream returns some RedisError exceptions as ordinary strings.
@@ -147,7 +154,7 @@ export default definePlugin<Config>({
         maxResultBytes: scope.maxResultBytes,
         failureRemoteStatus: 'unknown',
         schema(_name, schema) {
-          if (!object(schema) || !object(schema.properties)) return schema;
+          if (!object(schema.properties)) return schema;
           const properties = { ...schema.properties };
           for (const key of ['count', 'start', 'stop', 'end', 'cursor']) {
             if (!object(properties[key])) continue;

@@ -2,13 +2,19 @@ import { readFile } from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import type {
   InvestigationReadAccess,
+  ChannelInfoReadAccess,
   InvestigationQuery,
   InvestigationTurnStatus,
+  InvestigationPage,
+  InvestigationDetail,
+  EvidencePage,
+  TargetOverview,
+  ChannelOverview,
   Principal,
 } from '../../plugin-api/index.js';
 import { HostError } from '../../core/errors.js';
 
-const statuses = new Set<InvestigationTurnStatus>([
+const statuses = [
   'queued',
   'running',
   'completed',
@@ -16,7 +22,14 @@ const statuses = new Set<InvestigationTurnStatus>([
   'cancelled',
   'interrupted',
   'handled',
-]);
+] as const satisfies readonly InvestigationTurnStatus[];
+
+export type ManagementResponse =
+  | InvestigationPage
+  | InvestigationDetail
+  | EvidencePage
+  | { targets: readonly TargetOverview[] }
+  | { channels: readonly ChannelOverview[] };
 const assets: Record<string, readonly [string, string]> = {
   '/admin': ['index.html', 'text/html; charset=utf-8'],
   '/admin/': ['index.html', 'text/html; charset=utf-8'],
@@ -53,7 +66,8 @@ export async function managementResponse(
   url: URL,
   principal: Principal,
   access: InvestigationReadAccess | undefined,
-): Promise<unknown> {
+  channels?: ChannelInfoReadAccess,
+): Promise<ManagementResponse> {
   if (!access) throw new HostError('ACCESS_DENIED');
   const match = /^\/api\/investigations\/([A-Za-z0-9_-]{1,128})(\/evidence)?$/.exec(url.pathname);
   const allowed =
@@ -71,6 +85,10 @@ export async function managementResponse(
   )
     throw new HostError('INVALID_QUERY');
   const params = url.searchParams;
+  if (url.pathname === '/api/channels') {
+    if (!channels) throw new HostError('ACCESS_DENIED');
+    return { channels: channels.listChannels(principal) };
+  }
   if (url.pathname === '/api/targets') return { targets: access.listTargets(principal) };
   const limit = number(params.get('limit'), 20, 50);
   if (match?.[2]) {
@@ -99,11 +117,12 @@ export async function managementResponse(
       throw new HostError('INVALID_QUERY');
     const search = params.get('search');
     const targetId = params.get('targetId');
-    const status = params.get('status') as InvestigationTurnStatus | null;
+    const rawStatus = params.get('status');
+    const status = statuses.find((value) => value === rawStatus);
     if (
       (search !== null && search.length > 200) ||
       (targetId !== null && !/^[A-Za-z][A-Za-z0-9_-]{0,127}$/.test(targetId)) ||
-      (status !== null && !statuses.has(status))
+      (rawStatus !== null && status === undefined)
     )
       throw new HostError('INVALID_QUERY');
     const query: InvestigationQuery = {

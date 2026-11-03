@@ -14,6 +14,7 @@ import type {
   InvestigationDetail,
   InvestigationPage,
   TargetOverview,
+  ChannelOverview,
 } from '../src/plugin-api/index.js';
 
 const token = 'MANAGEMENT_SYNTHETIC_TOKEN';
@@ -101,6 +102,7 @@ test('console UI is opt-in while authenticated domain reads are independent of t
   }
   for (const resource of [
     '/api/targets',
+    '/api/channels',
     '/api/investigations',
     '/api/investigations/unknown',
     '/api/investigations/unknown/evidence?turnId=x',
@@ -108,7 +110,7 @@ test('console UI is opt-in while authenticated domain reads are independent of t
     assert.equal((await fetch(run.base() + resource)).status, 401);
     assert.equal(
       (await run.get(resource, 'plain')).status,
-      resource === '/api/targets' || resource === '/api/investigations' ? 200 : 403,
+      ['/api/targets', '/api/channels', '/api/investigations'].includes(resource) ? 200 : 403,
     );
   }
   assert.equal(
@@ -128,6 +130,47 @@ test('console UI is opt-in while authenticated domain reads are independent of t
     '?targetId=../secret',
   ])
     assert.equal((await run.get('/api/investigations' + query)).status, 400, query);
+});
+
+test('channel info reads safe current identities without scanning history and respects target grants', async (t) => {
+  const f = await setup(t);
+  let run = await f.start();
+  run.host.channelFor('chat').describe = () => ({
+    publicId: 'public-runtime-identity',
+    appSecret: 'SYNTHETIC_PRIVATE',
+    note: token,
+  });
+  const scan = t.mock.method(run.store, 'acceptances');
+  const read = async (name = 'chat') => {
+    const response = await run.get('/api/channels', name);
+    assert.equal(response.status, 200);
+    return ((await response.json()) as { channels: ChannelOverview[] }).channels;
+  };
+  assert.equal((await run.get('/api/channels?senderId=admin')).status, 400);
+  const channels = await read('other');
+  const chat = channels.find((channel) => channel.scope.instanceId === 'chat')!;
+  assert.deepEqual(chat.targets, ['a']);
+  assert.equal(chat.scope.resources.conversationId, identity.conversationId);
+  assert.equal(chat.details.publicId, 'public-runtime-identity');
+  assert.equal(chat.details.appSecret, '[REDACTED]');
+  assert.equal(chat.details.note, '[REDACTED]');
+  for (const secret of [token, 'SYNTHETIC_PRIVATE', 'configFile', f.root])
+    assert.ok(!JSON.stringify(channels).includes(secret), secret);
+  run.host.redactor.add(['0', 'rest', 'a']);
+  const safe = (await read()).find((channel) => channel.scope.instanceId === 'chat')!;
+  assert.equal(safe.scope.pluginId, 'rest');
+  assert.deepEqual(safe.targets, ['a', 'b']);
+  assert.equal(scan.mock.callCount(), 0, 'channel reads must not scan investigation history');
+  scan.mock.restore();
+  await f.close();
+  f.restrict();
+  run = await f.start();
+  const restricted = await read();
+  assert.deepEqual(
+    restricted.map((channel) => channel.scope.instanceId),
+    ['chat'],
+  );
+  assert.deepEqual(restricted[0]!.targets, ['b']);
 });
 
 test('management lists only authorized investigations before pagination, redacts input, and preserves diagnostic status', async (t) => {
@@ -182,6 +225,47 @@ test('management lists only authorized investigations before pagination, redacts
   assert.equal(detail.investigation.status, 'completed');
   assert.equal(detail.investigation.turnCount, 1);
   assert.equal(detail.turns.at(-1)!.status, 'handled');
+});
+
+test('management redacts data while keeping typed report, evidence and target identifiers intact', async (t) => {
+  const f = await setup(t);
+  const run = await f.start();
+  const first = await run.post({ messageId: 'typed-identity', targetId: 'a', text: 'investigate' });
+  const route = '/api/investigations/' + first.investigationId;
+  const original = (await (await run.get(route)).json()) as InvestigationDetail;
+  const stored = await run.store.evidence(first.turnId);
+  run.host.redactor.add(['a', 'engine', 'a-tools', 'completed', 'ok', first.investigationId]);
+
+  const detail = (await (await run.get(route)).json()) as InvestigationDetail;
+  const report = detail.turns[0]!.report!;
+  assert.equal(detail.investigation.status, 'completed');
+  assert.equal(report.targetId, 'a');
+  assert.equal(report.investigationId, first.investigationId);
+  assert.equal(report.turnId, first.turnId);
+  assert.deepEqual(
+    report.facts.map((fact) => fact.evidenceIds),
+    original.turns[0]!.report!.facts.map((fact) => fact.evidenceIds),
+  );
+
+  const page = (await (
+    await run.get(route + '/evidence?turnId=' + first.turnId)
+  ).json()) as EvidencePage;
+  for (const evidence of page.evidence) {
+    const source = stored.find((item) => item.id === evidence.id)!;
+    assert.ok(source);
+    assert.equal(evidence.status, source.status);
+    assert.equal(evidence.targetId, source.targetId);
+    assert.equal(evidence.providerInstanceId, source.providerInstanceId);
+    assert.equal(evidence.investigationId, first.investigationId);
+    assert.ok(!JSON.stringify(evidence.resources).includes('a-tools'));
+    assert.ok(!evidence.contentPreview.includes('TEST_SECRET_'));
+  }
+  const targets = ((await (await run.get('/api/targets')).json()) as { targets: TargetOverview[] })
+    .targets;
+  const target = targets.find((entry) => entry.targetId === 'a')!;
+  assert.equal(target.engine.instanceId, 'engine');
+  assert.equal(target.tools[0]!.instanceId, 'a-tools');
+  assert.ok(!JSON.stringify(target.engine.resources).includes('engine'));
 });
 
 test('management details, evidence previews and follow-ups paginate safely and survive restart', async (t) => {

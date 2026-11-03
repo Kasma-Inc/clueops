@@ -108,8 +108,15 @@ async function readPackage(
     if (!match) throw new Error();
     const document = parseDocument(match[1]!, { uniqueKeys: true, prettyErrors: false });
     if (document.errors.length || document.warnings.length) throw new Error();
-    const metadata = document.toJS({ maxAliasCount: 50 }) as Record<string, unknown>;
-    if (!metadata || typeof metadata.name !== 'string' || typeof metadata.description !== 'string')
+    const metadata: unknown = document.toJS({ maxAliasCount: 50 });
+    if (
+      !metadata ||
+      typeof metadata !== 'object' ||
+      !('name' in metadata) ||
+      !('description' in metadata) ||
+      typeof metadata.name !== 'string' ||
+      typeof metadata.description !== 'string'
+    )
       throw new Error();
     name = metadata.name;
     description = metadata.description.trim();

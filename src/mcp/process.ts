@@ -20,6 +20,8 @@ import { HostError } from '../core/errors.js';
 import { fingerprint } from '../core/identity.js';
 import { withDeadline } from '../core/lifecycle.js';
 
+const toolSchemaValidator = compileContract<JsonObject>({ type: 'object' }, 'tool input schema');
+
 export interface McpCommand {
   readonly command: string;
   readonly args: readonly string[];
@@ -32,13 +34,13 @@ export interface McpPolicy {
   readonly queryTimeoutMs: number;
   readonly maxResultBytes: number;
   readonly failureRemoteStatus?: 'unknown';
-  isError?(name: string, input: JsonObject, content: unknown): boolean;
+  isError?(name: string, input: JsonObject, content: JsonValue): boolean;
   truncated?(name: string, input: JsonObject, content: JsonValue): boolean;
-  schema?(name: string, schema: JsonSchema): JsonSchema;
+  schema?(name: string, schema: JsonObject): JsonSchema;
   command(context: ToolBindingContext, directory: string): Promise<McpCommand>;
   prepare(name: string, input: JsonObject): JsonObject;
   resources(name: string, input: JsonObject, content: JsonValue): readonly JsonObject[];
-  sanitize(value: unknown): JsonValue;
+  sanitize(value: JsonValue): JsonValue;
 }
 
 export function mcpProvider(policy: McpPolicy): ToolProvider {
@@ -133,7 +135,7 @@ export function mcpProvider(policy: McpPolicy): ToolProvider {
           const matches = listed.tools.filter((tool) => tool.name === name);
           if (matches.length !== 1) throw new HostError('TOOL_CATALOG_INVALID');
           const tool = matches[0]!;
-          const rawSchema = jsonValue(tool.inputSchema) as JsonObject;
+          const rawSchema = toolSchemaValidator.parse(tool.inputSchema);
           const hash = fingerprint(rawSchema);
           if (baseline.has(name) && baseline.get(name) !== hash)
             throw new HostError('TOOL_CATALOG_CHANGED');
@@ -203,7 +205,7 @@ export function mcpProvider(policy: McpPolicy): ToolProvider {
                 );
                 if (closed || signal.aborted || context.signal.aborted)
                   return failure('QUERY_CANCELLED');
-                const rawContent = result.structuredContent ?? result.content;
+                const rawContent = jsonValue(result.structuredContent ?? result.content);
                 // Interpret trusted backend protocol before redacting arbitrary business text.
                 const isError =
                   result.isError || policy.isError?.(name, arguments_, rawContent) === true;

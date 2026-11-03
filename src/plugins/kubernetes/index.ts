@@ -24,7 +24,11 @@ interface Config {
   context: string;
   maxResultBytes?: number;
 }
-function named(list: unknown, name: unknown, field: string): JsonObject {
+function named(
+  list: JsonValue | undefined,
+  name: JsonValue | undefined,
+  field: 'context' | 'cluster' | 'user',
+): JsonObject {
   if (!Array.isArray(list)) throw new HostError('KUBECONFIG_INVALID');
   const matches = list.filter((item) => object(item) && item.name === name);
   if (matches.length !== 1 || !object(matches[0][field]))
@@ -83,12 +87,11 @@ export default definePlugin<Config>({
       ).trim();
       delete user.tokenFile;
     }
-    const secrets = Object.entries(user)
-      .filter(
-        ([key, value]) =>
-          typeof value === 'string' && /token|password|key-data|certificate-data/.test(key),
-      )
-      .map(([, value]) => value as string);
+    const secrets = Object.entries(user).flatMap(([key, value]) =>
+      typeof value === 'string' && /token|password|key-data|certificate-data/.test(key)
+        ? [value]
+        : [],
+    );
     const redactor = privateRedactor(secrets, context);
     const kubeconfig = {
       apiVersion: 'v1',
@@ -107,7 +110,7 @@ export default definePlugin<Config>({
         },
       ],
     };
-    const trim = (value: unknown): JsonValue => {
+    const trim = (value: JsonValue): JsonValue => {
       if (Array.isArray(value)) return value.map(trim);
       if (object(value))
         return Object.fromEntries(

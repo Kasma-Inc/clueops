@@ -3,6 +3,7 @@ import { validators } from '../plugin-api/index.js';
 import type {
   AgentEngine,
   ChannelReadAccess,
+  ChannelOverview,
   InvestigationReadAccess,
   InvestigationScope,
   MessageHandler,
@@ -127,6 +128,29 @@ export class PluginHost {
   describePlugins(): readonly PluginScope[] {
     this.assertOpen();
     return Object.freeze([...this.#plugins.values()].map((item) => item.scope));
+  }
+
+  listChannels(principal: Principal): readonly ChannelOverview[] {
+    const allowed = new Set(this.allowedTargets(principal));
+    return [...this.#plugins.values()].flatMap(({ scope, instance }) => {
+      if (!instance.channel) return [];
+      const targets = [
+        ...new Set(
+          this.#configuration.composition.routes
+            .filter((route) => route.channel === scope.instanceId)
+            .flatMap((route) => route.targets)
+            .filter((id) => allowed.has(id)),
+        ),
+      ].sort();
+      if (!targets.length) return [];
+      return [
+        {
+          scope: { ...scope, resources: this.redactor.value(scope.resources) },
+          targets,
+          details: this.redactor.value(instance.channel.describe?.() ?? {}),
+        },
+      ];
+    });
   }
 
   get runtime(): RuntimeSettings {
@@ -260,6 +284,10 @@ export class PluginHost {
             this.#startAbort.signal,
             authorizeRead
               ? {
+                  channels: {
+                    listChannels: (incoming: Principal) =>
+                      this.listChannels(this.readPrincipal(incoming, id)),
+                  },
                   ...(investigations
                     ? {
                         investigations: {

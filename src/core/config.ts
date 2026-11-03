@@ -88,7 +88,7 @@ const declarationProperties = {
   enabled: { type: 'boolean' },
 } as const;
 const declaration = {
-  ...(objectSchema(declarationProperties, ['plugin']) as Record<string, JsonValue>),
+  ...objectSchema(declarationProperties, ['plugin']),
   not: { properties: { config: {}, configFile: {} }, required: ['config', 'configFile'] },
 };
 const route = objectSchema(
@@ -118,9 +118,9 @@ const serviceSchema = objectSchema(
       type: 'object',
       propertyNames: id,
       additionalProperties: {
-        ...(objectSchema({ ...declarationProperties, routes: { type: 'array', items: route } }, [
+        ...objectSchema({ ...declarationProperties, routes: { type: 'array', items: route } }, [
           'plugin',
-        ]) as Record<string, JsonValue>),
+        ]),
         not: { properties: { config: {}, configFile: {} }, required: ['config', 'configFile'] },
       },
     },
@@ -137,10 +137,7 @@ const targetValidator = compileContract<TargetFile>(
         items: {
           oneOf: [
             {
-              ...(objectSchema({ name: id, ...declarationProperties }, [
-                'name',
-                'plugin',
-              ]) as Record<string, JsonValue>),
+              ...objectSchema({ name: id, ...declarationProperties }, ['name', 'plugin']),
               not: {
                 properties: { config: {}, configFile: {} },
                 required: ['config', 'configFile'],

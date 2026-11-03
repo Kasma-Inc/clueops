@@ -46,7 +46,8 @@ export async function readAuthFile(file: string): Promise<AuthFile> {
     if (mode === 'apikey' || !object(value.tokens)) throw new Error();
     const tokens = value.tokens;
     const secrets = ['access_token', 'refresh_token', 'id_token'].map((key) => tokens[key]);
-    if (secrets.some((value) => typeof value !== 'string' || !value)) throw new Error();
+    if (!secrets.every((value): value is string => typeof value === 'string' && value.length > 0))
+      throw new Error();
     const claims: unknown = JSON.parse(
       Buffer.from(String(tokens.id_token).split('.')[1] ?? '', 'base64url').toString('utf8'),
     );
@@ -65,7 +66,7 @@ export async function readAuthFile(file: string): Promise<AuthFile> {
       kind: 'chatgpt',
       bytes,
       identity: hash(JSON.stringify([account, user])),
-      secrets: secrets as string[],
+      secrets,
     };
   } catch {
     throw new HostError('CODEX_AUTH_FILE_INVALID', file);

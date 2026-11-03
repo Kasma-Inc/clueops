@@ -1,4 +1,4 @@
-import { definePlugin, objectSchema } from '../../plugin-api/index.js';
+import { definePlugin, jsonValue, objectSchema } from '../../plugin-api/index.js';
 import type { JsonObject, JsonValue } from '../../plugin-api/index.js';
 import { mcpProvider } from '../../mcp/process.js';
 import { HostError } from '../../core/errors.js';
@@ -15,14 +15,16 @@ import {
   writeToml,
 } from '../shared.js';
 
-function decodeEnvelope(value: unknown): unknown {
+function decodeEnvelope(value: JsonValue): JsonValue {
   if (Array.isArray(value)) return value.map(decodeEnvelope);
   if (object(value) && value.type === 'text' && typeof value.text === 'string') {
+    let parsed: unknown;
     try {
-      return JSON.parse(value.text) as unknown;
+      parsed = JSON.parse(value.text);
     } catch {
       return value;
     }
+    return jsonValue(parsed);
   }
   return value;
 }
@@ -153,7 +155,7 @@ export default definePlugin<Config>({
         maxResultBytes: config.maxResultBytes ?? 131072,
         failureRemoteStatus: 'unknown',
         schema(_name, schema) {
-          return object(schema) ? { ...schema, additionalProperties: false } : schema;
+          return { ...schema, additionalProperties: false };
         },
         async command(_binding, directory) {
           const file = await writeToml(directory, {

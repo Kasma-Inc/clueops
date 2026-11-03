@@ -49,6 +49,24 @@ async function checkAdminConsole(page) {
   let releaseLogin;
   let holdOldList;
   let releaseOldList;
+  let channelMode = '';
+  const channelData = [
+    {
+      scope: {
+        ...scope,
+        instanceId: 'lark',
+        pluginId: 'lark',
+        resources: { appId: 'cli_fixture' },
+      },
+      targets: ['prod'],
+      details: { botOpenId: 'ou_fixture_bot' },
+    },
+    {
+      scope: { ...scope, instanceId: 'http', pluginId: 'rest' },
+      targets: ['prod'],
+      details: {},
+    },
+  ];
   const response = (route, value, status = 200) =>
     route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
   const waitFor = (fn, value) => page.waitForFunction(fn, value, { timeout: 6000 });
@@ -60,6 +78,10 @@ async function checkAdminConsole(page) {
   await page.route(base + '/api/**', async (route) => {
     const url = new URL(route.request().url());
     requests.push(url.pathname + url.search);
+    if (url.pathname === '/api/channels') {
+      if (channelMode === 'error') return response(route, { error: 'REST_UNAVAILABLE' }, 503);
+      return response(route, { channels: channelMode === 'empty' ? [] : channelData });
+    }
     if (url.pathname === '/api/targets') {
       if (holdLogin) {
         const wait = holdLogin;
@@ -413,6 +435,50 @@ async function checkAdminConsole(page) {
   await waitFor(() => document.querySelector('#connection-state').textContent.includes('已登录'));
   await page.getByRole('heading', { name: '目标配置', exact: true }).waitFor();
   passed.push('登录过程中导航不会提前进入后台');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.__copiedText = text;
+        },
+      },
+    });
+  });
+  await page.getByRole('link', { name: '渠道信息 只读' }).click();
+  await page.getByRole('heading', { name: '渠道信息', exact: true }).waitFor();
+  await page.getByText('ou_fixture_bot', { exact: true }).waitFor();
+  check(
+    (await page.locator('#nav-channels').getAttribute('aria-current')) === 'page',
+    '渠道导航未选中',
+  );
+  await page.getByRole('button', { name: '复制 机器人 Open ID', exact: true }).click();
+  await waitFor(() => window.__copiedText === 'ou_fixture_bot');
+  await page.getByRole('button', { name: '复制 App ID', exact: true }).click();
+  await waitFor(() => window.__copiedText === 'cli_fixture');
+  check((await page.locator('#content table').count()) === 0, '渠道页不应展示发送人历史表');
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  await page.screenshot({ path: 'output/playwright/admin-channels-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  check(
+    await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    '渠道页窄屏横向溢出',
+  );
+  await page.screenshot({ path: 'output/playwright/admin-channels-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  passed.push('渠道页展示当前身份，支持复制机器人Open ID和App ID，适配窄屏');
+  channelMode = 'error';
+  await page.getByRole('button', { name: '↻ 刷新渠道' }).click();
+  await page.getByRole('heading', { name: '暂时无法读取' }).waitFor();
+  channelMode = 'empty';
+  await page.getByRole('button', { name: '重新加载' }).click();
+  await page.getByRole('heading', { name: '没有可查看的渠道' }).waitFor();
+  channelMode = '';
+  await page.getByRole('button', { name: '↻ 刷新渠道' }).click();
+  await page.getByText('ou_fixture_bot', { exact: true }).waitFor();
+  passed.push('渠道页读取失败可重试，无权限范围时显示空态');
+  await page.getByRole('link', { name: '目标配置 只读' }).click();
+  await page.getByRole('heading', { name: '目标配置', exact: true }).waitFor();
   targetFailure = true;
   await page.getByRole('button', { name: '↻ 刷新配置' }).click();
   await waitFor(() => document.querySelector('#connect-error').textContent.includes('重新登录'));

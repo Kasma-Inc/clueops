@@ -3,7 +3,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { stat, realpath } from 'node:fs/promises';
 import { compileContract, snapshot, validators } from '../plugin-api/index.js';
 import type {
-  JsonObject,
   JsonValue,
   PluginDefinition,
   PluginInstance,
@@ -96,12 +95,12 @@ function validateInstance(
       throw new Error();
   }
   if (has('channel')) {
+    const channel = value.channel;
     if (
-      !object(value.channel) ||
-      ['start', 'stop', 'send', 'update'].some(
-        (name) => typeof (value.channel as Record<string, unknown>)[name] !== 'function',
-      ) ||
-      (value.channel.renderReply !== undefined && typeof value.channel.renderReply !== 'function')
+      !object(channel) ||
+      ['start', 'stop', 'send', 'update'].some((name) => typeof channel[name] !== 'function') ||
+      (channel.renderReply !== undefined && typeof channel.renderReply !== 'function') ||
+      (channel.describe !== undefined && typeof channel.describe !== 'function')
     )
       throw new Error();
   }
@@ -215,8 +214,11 @@ export async function loadPlugins(
         if (instances.has(instance)) throw new Error();
         instances.add(instance);
         if (object(instance) && typeof instance.dispose === 'function') {
-          const disposable = instance as unknown as PluginInstance;
-          disposers.push(() => disposable.dispose());
+          const disposable = instance;
+          const dispose = instance.dispose;
+          disposers.push(async () => {
+            await dispose.call(disposable);
+          });
         }
         validateInstance(instance, item.definition.manifest);
         const definitions = new Map<string, ToolDefinition>();
@@ -231,7 +233,7 @@ export async function loadPlugins(
           pluginId: item.definition.manifest.id,
           pluginVersion: item.definition.manifest.version,
           apiVersion: 1,
-          resources: instance.scope as JsonObject,
+          resources: instance.scope,
         });
         const tools = instance.tools;
         const provider: ToolProvider | undefined =

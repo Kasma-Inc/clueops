@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import ssh2 from 'ssh2';
 const { utils } = ssh2;
-import type { JsonObject, PluginContext } from '../../plugin-api/index.js';
+import type { PluginContext } from '../../plugin-api/index.js';
 import { objectSchema } from '../../plugin-api/index.js';
 import { HostError } from '../../core/errors.js';
 import { credentialSchema, privateRedactor, text } from '../shared.js';
@@ -38,17 +38,17 @@ export const authenticationSchema = {
       'passwordFile',
     ),
     {
-      ...(objectSchema({ type: { const: 'private-key' }, ...keyFields }) as JsonObject),
+      ...objectSchema({ type: { const: 'private-key' }, ...keyFields }),
       required: ['type', 'privateKeyFile'],
       ...noDoublePassphrase,
     },
     {
-      ...(credentialSchema(
+      ...credentialSchema(
         { type: { const: 'private-key+password' }, ...keyFields, ...passwordFields },
         ['type', 'privateKeyFile'],
         'password',
         'passwordFile',
-      ) as JsonObject),
+      ),
       ...noDoublePassphrase,
     },
   ],

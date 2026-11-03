@@ -49,9 +49,9 @@ export function credentialSchema(
   required: readonly string[],
   value: string,
   file: string,
-): JsonSchema {
+): JsonObject {
   return {
-    ...(objectSchema(properties, required) as JsonObject),
+    ...objectSchema(properties, required),
     oneOf: [
       { properties: { [value]: {} }, required: [value] },
       { properties: { [file]: {} }, required: [file] },
@@ -92,10 +92,10 @@ export async function secretFile(
 }
 export async function writeToml(
   directory: string,
-  value: Record<string, unknown>,
+  value: Parameters<typeof toml>[0],
 ): Promise<string> {
   const file = path.join(directory, 'backend.toml');
-  await writeFile(file, toml(value as Parameters<typeof toml>[0]), { mode: 0o600 });
+  await writeFile(file, toml(value), { mode: 0o600 });
   return file;
 }
 export function bounded(input: JsonValue | undefined, fallback: number, maximum: number): number {

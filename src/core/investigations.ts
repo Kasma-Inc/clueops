@@ -2,11 +2,16 @@ import type {
   InvestigationReadAccess,
   InvestigationQuery,
   InvestigationSummary,
+  InvestigationPage,
+  InvestigationDetail,
+  EvidencePage,
+  TargetOverview,
   Principal,
 } from '../plugin-api/index.js';
 import { HostError } from './errors.js';
 import type { PluginHost } from './host.js';
 import type { Acceptance, InvestigationStore } from './store.js';
+import { redactReport } from './reports.js';
 
 /** Reads existing durable state; never exposes plugin configuration or session handles. */
 export class InvestigationReader implements InvestigationReadAccess {
@@ -52,7 +57,7 @@ export class InvestigationReader implements InvestigationReadAccess {
     };
   }
 
-  listInvestigations(principal: Principal, query: InvestigationQuery) {
+  listInvestigations(principal: Principal, query: InvestigationQuery): InvestigationPage {
     const grouped = new Map<string, Acceptance[]>();
     for (const a of this.store.acceptances()) {
       const id = a.request.investigationId;
@@ -96,7 +101,7 @@ export class InvestigationReader implements InvestigationReadAccess {
     principal: Principal,
     investigationId: string,
     query: { readonly before?: number; readonly limit: number },
-  ) {
+  ): Promise<InvestigationDetail> {
     this.authorize(principal, investigationId);
     const history = this.history(investigationId);
     const matching = history.filter((a) => query.before === undefined || a.sequence < query.before);
@@ -114,7 +119,7 @@ export class InvestigationReader implements InvestigationReadAccess {
           updatedAt: state.updatedAt,
           status: state.status,
           ...(state.report
-            ? { report: this.host.redactor.value(state.report) as unknown as typeof state.report }
+            ? { report: redactReport(state.report, (text) => this.host.redactor.text(text)) }
             : {}),
           ...(state.usage ? { usage: state.usage } : {}),
           ...(state.failure ? { failure: this.host.redactor.text(state.failure) } : {}),
@@ -135,7 +140,7 @@ export class InvestigationReader implements InvestigationReadAccess {
     turnId: string,
     offset: number,
     limit: number,
-  ) {
+  ): Promise<EvidencePage> {
     this.authorize(principal, investigationId);
     if (!this.history(investigationId).some((a) => a.request.turnId === turnId))
       throw new HostError('ACCESS_DENIED');
@@ -151,7 +156,17 @@ export class InvestigationReader implements InvestigationReadAccess {
         const safe = this.host.redactor.value(content);
         const preview = typeof safe === 'string' ? safe : JSON.stringify(safe, null, 2);
         return {
-          ...(this.host.redactor.value(metadata) as unknown as typeof metadata),
+          ...metadata,
+          parameters: this.host.redactor.value(metadata.parameters),
+          resources: metadata.resources.map((resource) => this.host.redactor.value(resource)),
+          ...(metadata.failure
+            ? {
+                failure: {
+                  ...metadata.failure,
+                  message: this.host.redactor.text(metadata.failure.message),
+                },
+              }
+            : {}),
           contentPreview: preview.slice(0, 12000),
           previewTruncated: preview.length > 12000,
         };
@@ -160,15 +175,18 @@ export class InvestigationReader implements InvestigationReadAccess {
     };
   }
 
-  listTargets(principal: Principal) {
+  listTargets(principal: Principal): readonly TargetOverview[] {
     return this.host.allowedTargets(principal).map((id) => {
       const target = this.host.authorize(principal, id).target;
       // Plugin scopes are public resource identities, not raw connection configuration.
       return {
         targetId: target.targetId,
         revision: target.revision,
-        engine: this.host.redactor.value(target.engine) as unknown as typeof target.engine,
-        tools: this.host.redactor.value(target.tools) as unknown as typeof target.tools,
+        engine: { ...target.engine, resources: this.host.redactor.value(target.engine.resources) },
+        tools: target.tools.map((tool) => ({
+          ...tool,
+          resources: this.host.redactor.value(tool.resources),
+        })),
         knowledgeCount: target.knowledge.length,
         skills: (target.skills ?? []).map(({ name, description }) => ({
           name: this.host.redactor.text(name),

@@ -905,6 +905,21 @@ tbody tr:hover {
   padding: 2px 7px;
   white-space: nowrap;
 }
+.channel-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.channel-identity code {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.channel-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 .target-content {
   padding: 20px 22px;
 }
@@ -1084,6 +1099,14 @@ tbody tr:hover {
   }
   .nav-tag {
     font-size: 9px;
+  }
+  nav[aria-label='主导航'] a {
+    padding: 11px 9px;
+    gap: 7px;
+    white-space: nowrap;
+  }
+  nav[aria-label='主导航'] .nav-tag {
+    display: none;
   }
   .workspace {
     margin-left: 0;

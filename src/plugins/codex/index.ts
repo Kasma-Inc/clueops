@@ -18,6 +18,7 @@ import type {
   EngineEvent,
   EngineSessionOptions,
   JsonValue,
+  JsonObject,
 } from '../../plugin-api/index.js';
 import { HostError } from '../../core/errors.js';
 import { withDeadline } from '../../core/lifecycle.js';
@@ -57,7 +58,7 @@ interface Handle {
   usageUncertain?: boolean;
 }
 // The API supports a JSON Schema subset; Core still enforces unique evidence references.
-const reportOutputSchema: unknown = JSON.parse(
+const reportOutputSchema: JsonObject = JSON.parse(
   JSON.stringify(schemas.report, (key, value: unknown) =>
     key === 'uniqueItems' ? undefined : value,
   ),
@@ -131,7 +132,7 @@ export default definePlugin<Config>({
     apiVersion: 1,
     capabilities: ['engine'],
     configSchema: {
-      ...(objectSchema(
+      ...objectSchema(
         {
           apiKeyFile: text,
           apiKey: text,
@@ -146,7 +147,7 @@ export default definePlugin<Config>({
           filesystem: filesystemSchema,
         },
         ['model'],
-      ) as Record<string, JsonValue>),
+      ),
       oneOf: ['apiKey', 'apiKeyFile', 'authFile'].map((key) => ({
         properties: { [key]: {} },
         required: [key],

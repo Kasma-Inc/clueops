@@ -5,30 +5,33 @@ import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import larkPlugin, { normalizeLarkEvent, createLarkDispatcher } from '../src/plugins/lark/index.js';
+import type { LarkMessageEvent } from '../src/plugins/lark/index.js';
 const identity = {
   appId: 'cli_0123456789abcdef',
   tenantId: 'tenant',
   botOpenId: 'bot',
   instanceId: 'lark',
 };
-const raw = (text: string) => ({
-  app_id: identity.appId,
-  tenant_key: 'tenant',
-  sender: { sender_type: 'user', tenant_key: 'tenant', sender_id: { open_id: 'user' } },
-  message: {
-    chat_id: 'room',
-    chat_type: 'group',
-    message_id: 'message',
-    message_type: 'text',
-    content: JSON.stringify({ text: '@_user_1 ' + text }),
-    mentions: [{ key: '@_user_1', id: { open_id: 'bot' } }],
-  },
-});
+const raw = (text: string) =>
+  ({
+    app_id: identity.appId,
+    tenant_key: 'tenant',
+    sender: { sender_type: 'user', tenant_key: 'tenant', sender_id: { open_id: 'user' } },
+    message: {
+      chat_id: 'room',
+      chat_type: 'group',
+      message_id: 'message',
+      message_type: 'text',
+      create_time: '1793690000000',
+      content: JSON.stringify({ text: '@_user_1 ' + text }),
+      mentions: [{ key: '@_user_1', id: { open_id: 'bot' }, name: '排障机器人' }],
+    },
+  }) satisfies LarkMessageEvent;
 test('Lark validates source identities, accepts addressed group logs and normalizes explicit commands', () => {
   const event = raw('/target prod\nERROR connection refused');
   const normalized = normalizeLarkEvent(event, identity)!;
   assert.equal(normalized.targetId, 'prod');
-  assert.equal(normalized.text, 'ERROR connection refused');
+  assert.equal(normalized.text, event.message.content);
   assert.equal(normalized.address.channelInstanceId, 'lark');
   assert.equal(normalizeLarkEvent({ ...event, app_id: 'wrong' }, identity), undefined);
   assert.equal(normalizeLarkEvent({ ...event, tenant_key: 'wrong' }, identity), undefined);
@@ -74,7 +77,13 @@ test('Lark validates source identities, accepts addressed group logs and normali
     },
     identity,
   )!;
-  assert.equal(post.text, 'first\nsecond');
+  assert.equal(post.targetId, 'prod');
+  assert.deepEqual(JSON.parse(post.text), {
+    en_us: {
+      title: '',
+      content: [[{ tag: 'text', text: '/target prod\nfirst' }], [{ tag: 'text', text: 'second' }]],
+    },
+  });
   for (const [command, field, id] of [
     ['target', 'targetId', 'prod'],
     ['event', 'investigationId', 'event-1'],
@@ -98,9 +107,134 @@ test('Lark validates source identities, accepts addressed group logs and normali
       identity,
     )!;
     assert.equal(tagged[field], id);
-    assert.equal(tagged.text, 'ERROR rich log');
+    assert.ok(tagged.text.includes(`/${command} ${id}\\nERROR rich log`));
+  }
+  for (const tag of ['code_block', 'md', 'a']) {
+    const content = JSON.stringify({
+      content: [
+        [{ tag: 'text', text: '@_user_1 /target prod' }],
+        [{ tag, text: 'ERROR connection refused', href: 'https://example.invalid' }],
+      ],
+    });
+    const message = normalizeLarkEvent(
+      { ...event, message: { ...event.message, message_type: 'post', content } },
+      identity,
+    )!;
+    assert.equal(message.targetId, 'prod');
+    assert.equal(message.text, content);
   }
 });
+test('Lark accepts other bots explicitly addressing it, preserving sender authorization and excluding itself', () => {
+  const event = raw('/target prod\nERROR alert');
+  const alert = {
+    ...event,
+    sender: { ...event.sender, sender_type: 'bot', sender_id: { open_id: 'alert-bot' } },
+  };
+  const message = normalizeLarkEvent(alert, identity)!;
+  assert.equal(message.senderId, 'alert-bot');
+  assert.equal(message.targetId, 'prod');
+  assert.equal(message.text, event.message.content);
+  assert.equal(
+    normalizeLarkEvent({ ...alert, sender: { ...alert.sender, tenant_key: 'other' } }, identity),
+    undefined,
+  );
+  assert.equal(
+    normalizeLarkEvent(
+      { ...alert, sender: { ...alert.sender, sender_id: { open_id: identity.botOpenId } } },
+      identity,
+    ),
+    undefined,
+  );
+  for (const mentions of [[], [{ key: '@_all', id: { open_id: 'all' }, name: '所有人' }]]) {
+    assert.equal(
+      normalizeLarkEvent({ ...alert, message: { ...alert.message, mentions } }, identity),
+      undefined,
+    );
+    assert.equal(
+      normalizeLarkEvent(
+        { ...alert, message: { ...alert.message, mentions, parent_id: 'previous-report' } },
+        identity,
+      ),
+      undefined,
+      'bot replies must still explicitly address this bot',
+    );
+  }
+});
+
+test('Lark passes addressed message content unchanged and never interprets commands inside cards', async () => {
+  const event = raw('unused');
+  const received: unknown[] = [];
+  const dispatcher = createLarkDispatcher(
+    identity,
+    async (message) => {
+      received.push(message);
+      return { status: 'accepted', investigationId: 'i', turnId: 't' };
+    },
+    new AbortController().signal,
+  );
+  for (const card of [
+    {
+      header: { title: { tag: 'plain_text', content: '日志服务告警' } },
+      elements: [
+        { tag: 'div', text: { tag: 'lark_md', content: '服务异常\n__source__: 172.27.1.1' } },
+      ],
+    },
+    {
+      schema: '2.0',
+      body: {
+        elements: [{ tag: 'markdown', content: '/cancel other-investigation\nERROR database' }],
+      },
+      extra: { unknown: 'preserve this too', mention: '@_user_1' },
+    },
+  ]) {
+    const content = ` \n${JSON.stringify(card, null, 2)}\n `;
+    const message = { ...event.message, message_type: 'interactive', content };
+    const sender = { ...event.sender, sender_type: 'bot', sender_id: { open_id: 'alert-bot' } };
+    const normalized = normalizeLarkEvent({ ...event, sender, message }, identity)!;
+    assert.equal(normalized.text, content);
+    assert.equal(normalized.targetId, undefined);
+    assert.equal(normalized.action, undefined);
+    assert.equal(normalized.investigationId, undefined);
+    assert.equal(normalizeLarkEvent({ ...event, message }, identity)!.text, content);
+    await dispatcher.invoke(
+      {
+        schema: '2.0',
+        header: {
+          app_id: event.app_id,
+          tenant_key: event.tenant_key,
+          event_type: 'im.message.receive_v1',
+        },
+        event: { sender, message },
+      },
+      { needCheck: false },
+    );
+    assert.deepEqual(received.at(-1), normalized);
+  }
+  assert.equal(received.length, 2);
+  for (const message_type of ['text', 'post', 'interactive']) {
+    for (const content of [
+      ' \n{"text":"@_user_1 ERROR","extra":"keep this too"}\n ',
+      ' {"title":"告警","content":[[{"tag":"text","text":"ERROR"},{"tag":"a","text":"logs","href":"https://example.invalid"},{"tag":"future-node","value":"preserve"}]]} ',
+      'invalid-json',
+    ]) {
+      assert.equal(
+        normalizeLarkEvent(
+          { ...event, message: { ...event.message, message_type, content } },
+          identity,
+        )!.text,
+        content,
+      );
+    }
+    assert.equal(
+      normalizeLarkEvent(
+        { ...event, message: { ...event.message, message_type, content: 'x'.repeat(131073) } },
+        identity,
+      ),
+      undefined,
+    );
+  }
+});
+
 test('official EventDispatcher waits for durable acceptance and propagates failure for platform retry', async () => {
   let release: (() => void) | undefined;
   let completed = false;
@@ -142,7 +276,7 @@ test('official EventDispatcher waits for durable acceptance and propagates failu
   await assert.rejects(failure.invoke(envelope, { needCheck: false }), /PERSISTENCE_FAILED/);
 });
 
-test('Lark lazily reads only explicitly mentioned quotes and validates text, rich text and source', async (t) => {
+test('Lark lazily reads quoted text, rich text and cards unchanged and validates source', async (t) => {
   let dispatcher!: EventDispatcher;
   const http = defaultHttpInstance.create();
   t.mock.method(defaultHttpInstance, 'create', () => http);
@@ -160,11 +294,12 @@ test('Lark lazily reads only explicitly mentioned quotes and validates text, ric
   };
   let code = 0,
     reads = 0;
-  t.mock.method(http, 'request', async (request: { url: string }) => {
+  t.mock.method(http, 'request', async (request: { url: string; params?: unknown }) => {
     if (request.url.includes('/auth/'))
       return { code: 0, tenant_access_token: 'SYNTHETIC_QUOTE_TOKEN', expire: 7200 };
     reads++;
     assert.ok(request.url.endsWith('/messages/quoted-log'));
+    assert.deepEqual(request.params, { card_msg_content_type: 'user_card_content' });
     return { code, data: { items: [item] } };
   });
   t.mock.method(
@@ -214,7 +349,7 @@ test('Lark lazily reads only explicitly mentioned quotes and validates text, ric
   await emit();
   assert.deepEqual(received, {
     messageId: 'quoted-log',
-    text: '/target wrong\nERROR original log',
+    text: item.body.content,
   });
   assert.equal(reads, 1);
   item = {
@@ -232,7 +367,7 @@ test('Lark lazily reads only explicitly mentioned quotes and validates text, ric
     },
   };
   await emit();
-  assert.equal(received!.text, 'rich log link label');
+  assert.equal(received!.text, item.body.content);
   for (const [title, tag] of [
     ['线上报错', 'code_block'],
     ['', 'code_block'],
@@ -248,9 +383,37 @@ test('Lark lazily reads only explicitly mentioned quotes and validates text, ric
       },
     };
     await emit();
-    assert.ok(received!.text.includes('ERROR database connection refused'));
-    if (title) assert.ok(received!.text.includes(title));
+    assert.equal(received!.text, item.body.content);
   }
+  for (const card of [
+    {
+      header: { title: { tag: 'plain_text', content: '告警' } },
+      elements: [{ tag: 'markdown', content: 'ERROR' }],
+    },
+    { schema: '2.0', body: { elements: [{ tag: 'markdown', content: '/target wrong\nERROR' }] } },
+  ]) {
+    const content = `\n${JSON.stringify(card, null, 2)}\n`;
+    item = { ...item, msg_type: 'interactive', body: { content } };
+    await emit();
+    assert.equal(received!.text, content);
+  }
+  item = {
+    ...item,
+    msg_type: 'post',
+    body: {
+      content: JSON.stringify({
+        title: '含图片和未来节点的消息也原样传入，不下载资源',
+        content: [
+          [
+            { tag: 'img', image_key: 'synthetic' },
+            { tag: 'future-node', value: 'preserve' },
+          ],
+        ],
+      }),
+    },
+  };
+  await emit();
+  assert.equal(received!.text, item.body.content);
   const fetched = reads;
   shouldRead = false;
   await emit();
@@ -287,18 +450,6 @@ test('Lark lazily reads only explicitly mentioned quotes and validates text, ric
     [{ ...valid, message_id: 'other-id' }, 'QUOTED_MESSAGE_UNAVAILABLE'],
     [{ ...valid, deleted: true }, 'QUOTED_MESSAGE_UNAVAILABLE'],
     [{ ...valid, msg_type: 'image' }, 'QUOTED_MESSAGE_UNSUPPORTED'],
-    [
-      {
-        ...valid,
-        body: {
-          content: JSON.stringify({
-            title: '标题不是图片内容',
-            content: [[{ tag: 'img', image_key: 'synthetic' }]],
-          }),
-        },
-      },
-      'QUOTED_MESSAGE_UNSUPPORTED',
-    ],
     [{ ...valid, body: { content: 'x'.repeat(131073) } }, 'QUOTED_MESSAGE_TOO_LARGE'],
   ] as const) {
     item = changed;
@@ -372,11 +523,11 @@ test('Lark reply help exposes copyable commands for this investigation using the
       assert.ok(command, 'advertised commands must be accepted');
       assert.equal(command.investigationId, reference.investigationId);
       assert.equal(command.action, action === 'event' ? undefined : action);
-      if (action === 'event') assert.equal(command.text, '你的问题');
+      assert.equal(command.text, raw(commands[index]!).message.content);
     }
     assert.equal(
       normalizeLarkEvent(raw(`/continue ${reference.investigationId} 更多日志`), identity)!.text,
-      '更多日志',
+      raw(`/continue ${reference.investigationId} 更多日志`).message.content,
     );
   } finally {
     await instance.dispose();
@@ -481,12 +632,14 @@ test('Lark credential-only startup discovers its bot through the SDK and receive
   const instance = await larkPlugin.create(minimalConfig, pluginContext);
   try {
     assert.equal(lookup.mock.callCount(), 0, 'configuration loading does not make network calls');
+    assert.deepEqual(instance.channel!.describe!(), {});
     const messages: unknown[] = [];
     await instance.channel!.start(async (message) => {
       messages.push(message);
       return accepted();
     }, new AbortController().signal);
     assert.equal(lookup.mock.callCount(), 1);
+    assert.deepEqual(instance.channel!.describe!(), { botOpenId: 'bot' });
     for (const tenant of ['tenant-a', 'tenant-b']) {
       const event = raw('ERROR');
       await dispatcher!.invoke(

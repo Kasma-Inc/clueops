@@ -1,4 +1,5 @@
 import type {
+  ChannelMessage,
   Evidence,
   InvestigationReport,
   InvestigationTurnStatus,
@@ -34,7 +35,7 @@ export interface InvestigationTurn {
   readonly sequence: number;
   readonly sourceChannel: string;
   readonly text: string;
-  readonly action?: string;
+  readonly action?: NonNullable<ChannelMessage['action']>;
   readonly acceptedAt: string;
   readonly updatedAt: string;
   readonly status: InvestigationTurnStatus;
