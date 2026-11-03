@@ -8,6 +8,7 @@ import { InvestigationCoordinator } from '../src/core/coordinator.js';
 import type { ChannelMessage } from '../src/plugin-api/index.js';
 import { renderLarkReply } from '../src/plugins/lark/cards.js';
 import { messageKey } from '../src/core/identity.js';
+import { principal } from './helpers.js';
 
 const input = (messageId: string, extra: Partial<ChannelMessage> = {}): ChannelMessage => ({
   address: { channelInstanceId: 'chat', tenantId: 'tenant', conversationId: 'room' },
@@ -16,6 +17,174 @@ const input = (messageId: string, extra: Partial<ChannelMessage> = {}): ChannelM
   text: 'database timeout',
   targetId: 'a',
   ...extra,
+});
+
+test('retention hooks only receive session handles owned by that plugin instance', async (t) => {
+  const f = await fixture(t);
+  await f.writeConfig({
+    ...f.config,
+    plugins: Object.fromEntries(
+      Object.entries(f.config.plugins).map(([id, item]) => [
+        id,
+        {
+          ...item,
+          module: new URL('./fixtures/investigation-plugin.mjs', import.meta.url).pathname,
+        },
+      ]),
+    ),
+  });
+  const host = await f.loadHost();
+  const engineScope = host.authorize(principal, 'a').target.engine;
+  const engineId = engineScope.instanceId;
+  const handle = { privateSessionHandle: 'engine-only' };
+  await host.pruneInvestigations([
+    {
+      investigationId: 'expired',
+      sessions: [
+        { instanceId: engineId, pluginId: engineScope.pluginId, handle },
+        { instanceId: engineId, pluginId: 'replaced-engine', handle: { anotherPlugin: true } },
+      ],
+    },
+  ]);
+  const calls = (await f.events())
+    .map((line) => JSON.parse(line))
+    .filter((item) => item.action === 'prune');
+  assert.ok(calls.length > 1);
+  for (const call of calls) {
+    assert.deepEqual(call.investigations, ['expired']);
+    assert.deepEqual(call.handles, call.instanceId === engineId ? [handle] : []);
+  }
+});
+
+test('hourly retention expires old completed work and stops with the coordinator', async (t) => {
+  const f = await fixture(t),
+    host = await f.loadHost();
+  const now = Date.now();
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now });
+  const store = await InvestigationStore.open(path.join(f.root, 'state'));
+  const coordinator = new InvestigationCoordinator(host, store);
+  t.after(() => coordinator.close());
+  await coordinator.start();
+  const result = await coordinator.handle(input('retention-first'));
+  assert.equal(result.status, 'accepted');
+  await coordinator.idle();
+  assert.equal(store.acceptances().length, 1);
+  assert.equal(await coordinator.prune(now + 6 * 86400000), 0);
+  t.mock.timers.setTime(now + 8 * 86400000);
+  t.mock.timers.tick(3600000);
+  await coordinator.prune();
+  assert.equal(store.acceptances().length, 0);
+  assert.equal(coordinator.metrics.prunedInvestigations, 1);
+  if (result.status === 'accepted')
+    assert.deepEqual(
+      await coordinator.handle(
+        input('expired-followup', { investigationId: result.investigationId }),
+      ),
+      { status: 'rejected', reason: 'EVENT_NOT_FOUND' },
+    );
+  await coordinator.close();
+  t.mock.timers.tick(3600000);
+  assert.equal(await coordinator.prune(), 0);
+});
+
+test(
+  'plugin cleanup does not block new inputs and shutdown waits for it',
+  { timeout: 10000 },
+  async (t) => {
+    const f = await fixture(t),
+      host = await f.loadHost();
+    const store = await InvestigationStore.open(path.join(f.root, 'state'));
+    const coordinator = new InvestigationCoordinator(host, store);
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    t.after(async () => {
+      release();
+      await coordinator.close();
+    });
+    await coordinator.start();
+    const first = await coordinator.handle(input('cleanup-old'));
+    assert.equal(first.status, 'accepted');
+    await coordinator.idle();
+    let entered = () => {};
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    host.pruneInvestigations = async () => {
+      entered();
+      await gate;
+    };
+    const cleanup = coordinator.prune(Date.now() + 8 * 86400000);
+    await started;
+    assert.equal((await coordinator.handle(input('cleanup-fresh'))).status, 'accepted');
+    let closed = false;
+    const shutdown = coordinator.close().then(() => {
+      closed = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(closed, false);
+    release();
+    assert.equal(await cleanup, 1);
+    await shutdown;
+    const reopened = await InvestigationStore.open(path.join(f.root, 'state'));
+    assert.equal(
+      reopened.acceptances().length,
+      1,
+      'the concurrently accepted investigation is retained',
+    );
+    await reopened.close();
+  },
+);
+
+test('zero retentionDays disables expiry', async (t) => {
+  const f = await fixture(t);
+  await f.writeConfig({ ...f.config, runtime: { retentionDays: 0 } });
+  const host = await f.loadHost();
+  const store = await InvestigationStore.open(path.join(f.root, 'state'));
+  const coordinator = new InvestigationCoordinator(host, store);
+  t.after(() => coordinator.close());
+  await coordinator.start();
+  await coordinator.handle(input('keep-history'));
+  await coordinator.idle();
+  assert.equal(await coordinator.prune(Date.now() + 100 * 86400000), 0);
+  assert.equal(store.acceptances().length, 1);
+});
+
+test('failed plugin cleanup survives restart without blocking service and retries later', async (t) => {
+  const f = await fixture(t),
+    host = await f.loadHost();
+  let store = await InvestigationStore.open(path.join(f.root, 'state'));
+  const message = input('expired-before-restart');
+  await store.accept({
+    version: 1,
+    key: messageKey(message),
+    sequence: 1,
+    acceptedAt: new Date().toISOString(),
+    request: {
+      investigationId: 'expired',
+      turnId: 'expired-turn',
+      scope: host.authorize(principal, 'a'),
+      message,
+    },
+  });
+  await store.setTurn('expired-turn', 'cancelled');
+  await store.prune(Date.now() + 86400000, new Set());
+  await store.close();
+  store = await InvestigationStore.open(path.join(f.root, 'state'));
+  const coordinator = new InvestigationCoordinator(host, store);
+  t.after(() => coordinator.close());
+  let attempts = 0;
+  host.pruneInvestigations = async () => {
+    if (++attempts === 1) throw new Error('synthetic temporary filesystem failure');
+  };
+  await coordinator.start();
+  assert.equal(attempts, 1);
+  assert.equal((await coordinator.handle(input('after-cleanup-error'))).status, 'accepted');
+  await coordinator.idle();
+  assert.equal(await coordinator.prune(), 1);
+  assert.equal(attempts, 2);
+  assert.equal(store.acceptances().length, 1);
 });
 
 test('source-local guidance renders authorized targets and rejection cards without creating investigations', async (t) => {

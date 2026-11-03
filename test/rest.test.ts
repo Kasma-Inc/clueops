@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { stringify } from 'yaml';
 import restPlugin, { RestChannel } from '../src/plugins/rest/index.js';
+import { RestMailbox } from '../src/plugins/rest/mailbox.js';
 import type {
   ChannelMessage,
   OutboundMessage,
@@ -65,6 +66,40 @@ async function setup(t: TestContext) {
 }
 const post = (endpoint: string, message: unknown) =>
   fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(message) });
+
+test('mailbox retention removes only expired investigations and serializes pagination with deletion', async (t) => {
+  const f = await setup(t);
+  const directory = path.join(f.root, 'retention-mailbox');
+  let mailbox = await RestMailbox.open(directory, () => {});
+  await mailbox.append(f.outbound('expired'));
+  await mailbox.append({
+    ...f.outbound('retained'),
+    reference: { investigationId: 'retained', turnId: 'other' },
+  });
+  const { reference: _reference, ...notice } = f.outbound('notice');
+  await mailbox.append(notice);
+  const [page] = await Promise.all([
+    mailbox.page('event', 0, 100),
+    mailbox.prune(new Set(['event'])),
+  ]);
+  assert.equal(
+    page.messages.length,
+    1,
+    'a page in progress remains readable while cleanup is queued',
+  );
+  assert.deepEqual((await mailbox.page('event', 0, 100)).messages, []);
+  assert.equal((await mailbox.page('retained', 0, 100)).messages.length, 1);
+  assert.equal(
+    (await readdir(directory)).length,
+    2,
+    'unrelated replies and source-local notices remain',
+  );
+  mailbox = await RestMailbox.open(directory, () => {});
+  assert.deepEqual((await mailbox.page('event', 0, 100)).messages, []);
+  await mailbox.prune(new Set(['event']));
+  await mailbox.append(f.outbound('fresh'));
+  assert.equal((await mailbox.page('event', 0, 100)).messages.length, 1);
+});
 
 test('REST authenticates every request, fixes caller identity and bounds malformed inputs without echoing them', async (t) => {
   const f = await setup(t);

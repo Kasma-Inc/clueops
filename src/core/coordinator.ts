@@ -44,9 +44,12 @@ export class InvestigationCoordinator {
     returnedBytes: 0,
     queryMilliseconds: 0,
     unavailableSources: 0,
+    prunedInvestigations: 0,
   };
   #closed = false;
   #closeOperation: Promise<void> | undefined;
+  #retentionTimer: ReturnType<typeof setInterval> | undefined;
+  #retention: Promise<number> | undefined;
   constructor(
     readonly host: PluginHost,
     readonly store: InvestigationStore,
@@ -65,6 +68,17 @@ export class InvestigationCoordinator {
       investigations,
     );
     if (this.#closed) return;
+    await this.prune();
+    if (this.#closed) return;
+    if (this.host.runtime.retentionDays > 0) {
+      this.#retentionTimer = setInterval(
+        () => {
+          void this.prune().catch(() => process.stderr.write('RETENTION_CLEANUP_FAILED\n'));
+        },
+        60 * 60 * 1000,
+      );
+      this.#retentionTimer.unref();
+    }
     this.schedule();
     this.dispatch();
   }
@@ -891,12 +905,47 @@ export class InvestigationCoordinator {
       await Promise.all([...this.#events.values(), ...this.#sending.values()]);
     }
   }
+  prune(now = Date.now()): Promise<number> {
+    if (this.#closed) return Promise.resolve(0);
+    this.#retention ??= (async () => {
+      const investigations = await this.#accept.run(async () => {
+        if (this.#closed) return [];
+        const protectedIds = new Set(this.#events.keys());
+        for (const delivery of this.store.deliveries())
+          if (this.#sending.has(delivery.id) && delivery.message.reference)
+            protectedIds.add(delivery.message.reference.investigationId);
+        return this.store.prune(
+          this.host.runtime.retentionDays === 0
+            ? Number.NEGATIVE_INFINITY
+            : now - this.host.runtime.retentionDays * 24 * 60 * 60 * 1000,
+          protectedIds,
+        );
+      });
+      // Plugin-owned files and native CLI cleanup must not hold the acceptance/store queues.
+      if (investigations.length) {
+        try {
+          await this.host.pruneInvestigations(investigations);
+        } catch {
+          process.stderr.write('RETENTION_PLUGIN_CLEANUP_FAILED\n');
+          return 0; // The durable plans retain plugin references for the next check.
+        }
+        await this.store.finishPruning(investigations.map((item) => item.investigationId));
+        this.metrics.prunedInvestigations += investigations.length;
+      }
+      return investigations.length;
+    })().finally(() => {
+      this.#retention = undefined;
+    });
+    return this.#retention;
+  }
   close(): Promise<void> {
     if (this.#closeOperation) return this.#closeOperation;
     this.#closed = true;
+    clearInterval(this.#retentionTimer);
     this.#abort.abort();
     this.#closeOperation = (async () => {
       try {
+        await this.#retention?.catch(() => {});
         await this.host.close(() => this.idle());
       } finally {
         await this.store.close();

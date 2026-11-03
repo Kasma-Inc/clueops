@@ -126,6 +126,12 @@ export default {
     }
     return {
       scope: { resourceId: config.resourceId },
+      async pruneInvestigations(investigations) {
+        await record('prune', {
+          investigations: investigations.map((item) => item.investigationId),
+          handles: investigations.flatMap((item) => item.sessionHandles),
+        });
+      },
       engine: {
         supportsNativeTools: config.nativeTools === true,
         async createSession(options) {

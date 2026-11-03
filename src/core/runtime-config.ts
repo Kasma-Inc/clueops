@@ -2,6 +2,7 @@ import type { JsonObject } from '../plugin-api/index.js';
 
 export const runtimeDefaults = Object.freeze({
   stateDirectory: '.clueops/state',
+  retentionDays: 7,
   turnTimeoutMs: 120000,
   queryTimeoutMs: 15000,
   cleanupTimeoutMs: 7000,
@@ -33,7 +34,7 @@ export const runtimeSchema = {
           ? { type: 'string', minLength: 1 }
           : {
               type: 'integer',
-              minimum: key === 'maxMessageBytes' ? 256 : 1,
+              minimum: key === 'maxMessageBytes' ? 256 : key === 'retentionDays' ? 0 : 1,
               maximum: key.endsWith('Bytes')
                 ? 16777216
                 : key.endsWith('Concurrency')

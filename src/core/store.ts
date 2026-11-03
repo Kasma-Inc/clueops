@@ -76,6 +76,35 @@ export interface OutputPlan {
   readonly id: string;
   readonly messages: readonly OutboundMessage[];
 }
+export interface ExpiredInvestigation {
+  readonly investigationId: string;
+  readonly sessions: readonly {
+    readonly instanceId: string;
+    readonly pluginId: string;
+    readonly handle: JsonValue;
+  }[];
+}
+interface PrunePlan extends ExpiredInvestigation {
+  readonly version: 1;
+  readonly accepted: readonly string[];
+  readonly turns: readonly string[];
+  readonly evidence: readonly string[];
+  readonly deliveries: readonly string[];
+  readonly outputs: readonly string[];
+}
+const recordKinds = ['accepted', 'turns', 'evidence', 'deliveries', 'outputs'] as const;
+const pruneValidator = compileContract<PrunePlan>(
+  objectSchema({
+    version: { const: 1 },
+    investigationId: text,
+    ...Object.fromEntries(recordKinds.map((kind) => [kind, { type: 'array', items: text }])),
+    sessions: {
+      type: 'array',
+      items: objectSchema({ instanceId: text, pluginId: text, handle: {} }),
+    },
+  }),
+  'prune plan',
+);
 const outputValidator = compileContract<OutputPlan>(
   objectSchema({
     version: { const: 1 },
@@ -159,7 +188,13 @@ async function durableDirectory(directory: string): Promise<void> {
 function missing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException).code === 'ENOENT';
 }
-export type CommitPhase = 'temp-synced' | 'published' | 'directory-synced';
+export type CommitPhase =
+  | 'temp-synced'
+  | 'published'
+  | 'directory-synced'
+  | 'prune-planned'
+  | 'prune-file-deleted'
+  | 'prune-deleted';
 
 /** The immutable acceptance file is the commit; every other view is recoverable. */
 export class InvestigationStore {
@@ -169,6 +204,7 @@ export class InvestigationStore {
   readonly #deliveries = new Map<string, Delivery>();
   readonly #evidence = new Map<string, Evidence>();
   readonly #outputs = new Map<string, OutputPlan>();
+  readonly #pruning = new Map<string, PrunePlan>();
   #closing = false;
   #poisoned = false;
   private constructor(
@@ -187,8 +223,7 @@ export class InvestigationStore {
     try {
       if (!native.tryLock(lock.fd)) throw new HostError('STATE_DIRECTORY_LOCKED');
       const store = new InvestigationStore(root, lock, options.commitProbe);
-      for (const name of ['accepted', 'turns', 'evidence', 'deliveries', 'outputs'])
-        await durableDirectory(path.join(root, name));
+      for (const name of [...recordKinds, 'pruning']) await durableDirectory(path.join(root, name));
       // Verify required no-clobber and directory-sync operations on the actual state volume.
       const probe = path.join(root, '.probe-' + randomUUID());
       const handle = await open(probe, 'wx', 0o600);
@@ -201,6 +236,14 @@ export class InvestigationStore {
       } finally {
         await unlink(probe);
         await unlink(probe + '.link').catch(() => {});
+      }
+      // Finish committed deletions before validating references or reconstructing queued turns.
+      for (const file of await store.files('pruning', true)) {
+        const plan = await store.parse(file, pruneValidator);
+        if (file !== store.file('pruning', plan.investigationId))
+          throw new HostError('STATE_CORRUPT');
+        store.#pruning.set(plan.investigationId, plan);
+        await store.removeRecords(plan);
       }
       await store.recover();
       return store;
@@ -453,6 +496,8 @@ export class InvestigationStore {
     if (record.key !== messageKey(record.request.message))
       throw new HostError('ACCEPTANCE_KEY_INVALID');
     return this.mutate(async () => {
+      if ([...this.#pruning.values()].some((plan) => plan.accepted.includes(record.key)))
+        throw new HostError('MESSAGE_ID_CONFLICT');
       const original = this.#acceptances.get(record.key);
       if (original) {
         if (
@@ -605,6 +650,104 @@ export class InvestigationStore {
       this.#deliveries.set(delivery.id, delivery);
       return delivery;
     });
+  }
+  /** Delete whole inactive investigations, with a small durable plan for interrupted cleanup. */
+  async prune(
+    cutoff: number,
+    protectedIds: ReadonlySet<string>,
+  ): Promise<readonly ExpiredInvestigation[]> {
+    return this.mutate(async () => {
+      const grouped = new Map<string, Acceptance[]>();
+      for (const a of this.#acceptances.values()) {
+        const id = a.request.investigationId;
+        const history = grouped.get(id) ?? [];
+        history.push(a);
+        grouped.set(id, history);
+      }
+      for (const [id, history] of grouped) {
+        if (protectedIds.has(id) || this.#pruning.has(id)) continue;
+        const states = history.map((a) => this.turn(a.request.turnId));
+        const deliveries = [...this.#deliveries.values()].filter(
+          (d) => d.message.reference?.investigationId === id,
+        );
+        if (
+          states.some((s) => ['queued', 'running', 'interrupted'].includes(s.status)) ||
+          deliveries.some((d) => d.status !== 'sent') ||
+          Math.max(
+            ...history.map((a) => Date.parse(a.acceptedAt)),
+            ...states.map((s) => Date.parse(s.updatedAt)),
+            ...deliveries.map((d) => Date.parse(d.updatedAt)),
+          ) >= cutoff
+        )
+          continue;
+        const plan: PrunePlan = {
+          version: 1,
+          investigationId: id,
+          accepted: history.map((a) => a.key),
+          turns: states.map((s) => s.turnId),
+          evidence: [...this.#evidence.values()]
+            .filter((e) => e.investigationId === id)
+            .map((e) => e.id),
+          deliveries: deliveries.map((d) => d.id),
+          outputs: [...this.#outputs.values()]
+            .filter((o) => o.messages.some((m) => m.reference?.investigationId === id))
+            .map((o) => o.id),
+          sessions: history.flatMap((a) => {
+            const handle = this.turn(a.request.turnId).sessionHandle;
+            return handle === undefined
+              ? []
+              : [
+                  {
+                    instanceId: a.request.scope.target.engine.instanceId,
+                    pluginId: a.request.scope.target.engine.pluginId,
+                    handle,
+                  },
+                ];
+          }),
+        };
+        await this.publish(this.file('pruning', id), plan, true);
+        this.#pruning.set(id, plan);
+        await this.commitProbe?.('prune-planned');
+      }
+      const plans = [...this.#pruning.values()];
+      for (const plan of plans) {
+        await this.removeRecords(plan);
+        for (const key of plan.accepted) this.#acceptances.delete(key);
+        for (const key of plan.turns) this.#states.delete(key);
+        for (const key of plan.evidence) this.#evidence.delete(key);
+        for (const key of plan.deliveries) this.#deliveries.delete(key);
+        for (const key of plan.outputs) this.#outputs.delete(key);
+        await this.commitProbe?.('prune-deleted');
+      }
+      return plans;
+    });
+  }
+  async finishPruning(investigationIds: readonly string[]): Promise<void> {
+    await this.mutate(async () => {
+      for (const id of investigationIds) {
+        await unlink(this.file('pruning', id)).catch((error) => {
+          if (!missing(error)) throw error;
+        });
+        await syncDirectory(path.join(this.directory, 'pruning'));
+        this.#pruning.delete(id);
+      }
+    });
+  }
+  private async removeRecords(plan: PrunePlan): Promise<void> {
+    try {
+      for (const kind of recordKinds) {
+        for (const id of plan[kind]) {
+          await unlink(this.file(kind, id)).catch((error) => {
+            if (!missing(error)) throw error;
+          });
+          await this.commitProbe?.('prune-file-deleted');
+        }
+        await syncDirectory(path.join(this.directory, kind));
+      }
+    } catch (error) {
+      this.#poisoned = true;
+      throw error;
+    }
   }
   async close(): Promise<void> {
     if (this.#closing) {

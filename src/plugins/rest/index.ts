@@ -63,6 +63,9 @@ export class RestChannel implements MessageChannel {
     const value = this.#server?.address();
     return value && typeof value !== 'string' ? value : undefined;
   }
+  async pruneInvestigations(investigationIds: ReadonlySet<string>): Promise<void> {
+    await this.#mailbox?.prune(investigationIds);
+  }
   private check(message: OutboundMessage): void {
     if (fingerprint(message.address) !== fingerprint(this.#address))
       throw new HostError('OUTBOUND_SOURCE_MISMATCH');
@@ -305,6 +308,8 @@ export default definePlugin<Config>({
         senderId: config.senderId,
       },
       channel,
+      pruneInvestigations: (investigations) =>
+        channel.pruneInvestigations(new Set(investigations.map((item) => item.investigationId))),
       dispose: () => channel.stop(),
     };
   },

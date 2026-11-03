@@ -69,6 +69,8 @@ function validateInstance(
   if (!object(value) || typeof value.dispose !== 'function' || !object(value.scope))
     throw new Error();
   snapshot(value.scope);
+  if (value.pruneInvestigations !== undefined && typeof value.pruneInvestigations !== 'function')
+    throw new Error();
   const has = (kind: 'engine' | 'tools' | 'channel') => manifest.capabilities.includes(kind);
   for (const kind of ['engine', 'tools', 'channel'] as const) {
     if (has(kind) !== (value[kind] !== undefined)) throw new Error();

@@ -46,7 +46,7 @@ curl -sS http://127.0.0.1:8080/messages \
 
 REST 的 `conversationId` 是认证来源和回复地址，不是调查归属或 Codex thread 编号；同一入口可创建多个独立调查。新 `messageId` 且不带调查/回复关联创建新调查，带 `investigationId` 或 `replyToMessageId` 才续接。Lark及其他渠道同样须显式关联调查；有目标权限的调用者可以在不同入口使用同一调查编号查询、追问、取消或续接，不会按最近调查猜测。平台回复消息编号仍只在当前来源地址内解析。Lark已发送消息遵循群本身的可见权限。
 
-统一调查查询使用 `GET /api/investigations`、`GET /api/investigations/:id` 和证据接口，接口不依赖 `admin` 页面开关。`GET /messages` 是当前 REST 实例的投递邮箱，只包含投递到该实例的回复，不代表其他来源调查的全部内容。回复邮箱在 `runtime.stateDirectory/plugins/<渠道名>/mailbox/`，与调查记录分开保存。单实例最多10000条、单条128KiB，容量满时明确失败，不自动删旧回复；调试数据需要清理时先停机并保留仍需恢复的调查记录。该入口用于受信客户端调试；多个调用身份可分别配置渠道实例和Token。
+统一调查查询使用 `GET /api/investigations`、`GET /api/investigations/:id` 和证据接口，接口不依赖 `admin` 页面开关。`GET /messages` 是当前 REST 实例的投递邮箱，只包含投递到该实例的回复，不代表其他来源调查的全部内容。回复邮箱在 `runtime.stateDirectory/plugins/<渠道名>/mailbox/`，与调查记录分开保存。单实例最多10000条、单条128KiB，过期调查的回复随历史清理删除；容量满时仍明确失败，不为接收新消息淘汰未过期回复。该入口用于受信客户端调试；多个调用身份可分别配置渠道实例和Token。
 
 
 ## Lark 操作与恢复

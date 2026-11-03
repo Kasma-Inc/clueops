@@ -1,5 +1,7 @@
 import { Codex } from '@openai/codex-sdk';
-import { mkdir, readFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -79,6 +81,27 @@ const handleValidator = compileContract<Handle>(
   ),
   'codex handle',
 );
+const execute = promisify(execFile);
+
+async function savedThreads(home: string, ids: ReadonlySet<string>): Promise<Set<string>> {
+  const found = new Set<string>();
+  async function visit(directory: string): Promise<void> {
+    const entries = await readdir(directory, { withFileTypes: true }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw error;
+    });
+    for (const entry of entries) {
+      if (entry.isDirectory()) await visit(path.join(directory, entry.name));
+      else if (entry.isFile()) {
+        const id = /-([a-f0-9-]{36})\.jsonl(?:\.zst)?$/.exec(entry.name)?.[1];
+        if (id && ids.has(id)) found.add(id);
+      }
+    }
+  }
+  await visit(path.join(home, 'sessions'));
+  await visit(path.join(home, 'archived_sessions'));
+  return found;
+}
 async function knowledge(paths: readonly string[]): Promise<string> {
   let result = '';
   async function read(file: string, depth: number): Promise<void> {
@@ -178,6 +201,9 @@ export default definePlugin<Config>({
       throw error;
     }
     const live = new Set<AgentSession>();
+    const launcher = config.launcher
+      ? context.resolvePath(config.launcher)
+      : fileURLToPath(new URL('../../../tools/codex-launcher.mjs', import.meta.url));
     async function session(
       options: EngineSessionOptions,
       parent: AbortSignal,
@@ -323,9 +349,7 @@ export default definePlugin<Config>({
               : await permissionProfile({ home, work, temporary, codexHome, access });
             const codex = new Codex({
               configOverrides: permissions.configOverrides,
-              codexPathOverride: config.launcher
-                ? context.resolvePath(config.launcher)
-                : fileURLToPath(new URL('../../../tools/codex-launcher.mjs', import.meta.url)),
+              codexPathOverride: launcher,
               env: {
                 PATH: process.env.PATH ?? '/usr/bin:/bin',
                 HOME: home,
@@ -572,6 +596,39 @@ export default definePlugin<Config>({
         supportsSkills: true,
         createSession: (options, signal) => session(options, signal),
         resumeSession: (handle, options, signal) => session(options, signal, handle),
+      },
+      async pruneInvestigations(investigations) {
+        const handles = investigations.flatMap((item) =>
+          item.sessionHandles.map((value) => handleValidator.parse(value)),
+        );
+        if (!handles.length) return;
+        for (const handle of handles) {
+          if (handle.instanceId !== context.instanceId)
+            throw new HostError('SESSION_SCOPE_MISMATCH');
+          if (
+            [...live].some(
+              (s) => handleValidator.parse(s.handle).directoryId === handle.directoryId,
+            )
+          )
+            throw new HostError('SESSION_NOT_AVAILABLE');
+        }
+        if (auth.kind === 'chatgpt') {
+          const home = await auth.home();
+          const threads = await savedThreads(
+            home,
+            new Set(handles.flatMap((h) => (h.threadId ? [h.threadId] : []))),
+          );
+          for (const id of threads) {
+            // The CLI owns its transcript/index format and deletes descendant threads as well.
+            await execute(launcher, ['delete', '--force', id], {
+              env: { PATH: process.env.PATH ?? '/usr/bin:/bin', CODEX_HOME: home },
+              timeout: 30000,
+              maxBuffer: 1024 * 1024,
+            });
+          }
+        }
+        for (const id of new Set(handles.map((h) => h.directoryId)))
+          await rm(path.join(root, id), { recursive: true, force: true });
       },
       async dispose() {
         try {

@@ -23,6 +23,7 @@ import { Redactor } from './redaction.js';
 import { runtimeDefaults } from './runtime-config.js';
 import type { RuntimeSettings } from './runtime-config.js';
 import { fingerprint } from './identity.js';
+import type { ExpiredInvestigation } from './store.js';
 
 export class PluginHost {
   readonly #configuration: Configuration;
@@ -140,6 +141,21 @@ export class PluginHost {
     const channel = this.#plugins.get(instanceId)?.instance.channel;
     if (!channel) throw new HostError('CHANNEL_NOT_FOUND');
     return channel;
+  }
+
+  async pruneInvestigations(investigations: readonly ExpiredInvestigation[]): Promise<void> {
+    this.assertOpen();
+    for (const [id, plugin] of this.#plugins) {
+      if (!plugin.instance.pruneInvestigations) continue;
+      await plugin.instance.pruneInvestigations(
+        investigations.map((item) => ({
+          investigationId: item.investigationId,
+          sessionHandles: item.sessions
+            .filter((s) => s.instanceId === id && s.pluginId === plugin.scope.pluginId)
+            .map((s) => s.handle),
+        })),
+      );
+    }
   }
 
   allowedTargets(principal: Principal): readonly string[] {

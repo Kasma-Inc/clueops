@@ -342,6 +342,13 @@ export interface PluginInstance {
   readonly engine?: AgentEngine;
   readonly tools?: ToolProvider;
   readonly channel?: MessageChannel;
+  /** Remove local data for expired investigations; must be idempotent and preserve authentication. */
+  pruneInvestigations?(
+    investigations: readonly {
+      readonly investigationId: string;
+      readonly sessionHandles: readonly JsonValue[];
+    }[],
+  ): Promise<void>;
   /** Idempotently release acquired resources. Channels are stopped first. */
   dispose(): Promise<void>;
 }

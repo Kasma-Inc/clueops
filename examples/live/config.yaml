@@ -7,6 +7,8 @@ version: 1
 runtime:
   # 调查记录、证据及默认插件状态；此路径最终位于项目根目录 .clueops/state。
   stateDirectory: ../.clueops/state
+  # 已结束且投递确认的调查，最后活动超过此天数后整条清理；0 关闭自动过期。
+  retentionDays: 7
   # 默认只统计Token用量；需要上限时取消注释。只在全局配置，不放agent.config。
   # maxModelTokens: 200000
 

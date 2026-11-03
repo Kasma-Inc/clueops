@@ -17,7 +17,12 @@ const binary = path.join(path.dirname(platformPackage), 'vendor', triple, 'bin',
 const args = process.argv.slice(2);
 const child = spawn(
   binary,
-  [args[0], '--strict-config', '--ignore-user-config', ...args.slice(1)],
+  [
+    args[0],
+    '--strict-config',
+    ...(args[0] === 'exec' ? ['--ignore-user-config'] : []),
+    ...args.slice(1),
+  ],
   {
     env: process.env,
     stdio: 'inherit',

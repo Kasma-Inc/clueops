@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mkdir, readFile, readdir, stat, symlink, truncate, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { compileContract } from '../src/plugin-api/index.js';
 import type {
@@ -50,6 +51,76 @@ function authDocument(
     last_refresh: new Date().toISOString(),
   };
 }
+
+test('retention uses native thread deletion, removes workspaces and preserves shared authentication', async (t) => {
+  const f = await setup(t);
+  const auth = await f.native();
+  t.after(() => auth.release());
+  const home = await auth.home();
+  const sessionRoot = path.join(home, 'sessions');
+  await mkdir(sessionRoot, { recursive: true });
+  const threadId = randomUUID(),
+    otherId = randomUUID(),
+    directoryId = randomUUID();
+  await writeFile(path.join(sessionRoot, 'rollout-' + threadId + '.jsonl'), 'expired transcript');
+  await writeFile(path.join(sessionRoot, 'rollout-' + otherId + '.jsonl'), 'retained transcript');
+  const workspace = path.join(f.context.stateDirectory!, directoryId);
+  await mkdir(workspace, { recursive: true });
+  await writeFile(path.join(workspace, 'evidence.txt'), 'expired workspace');
+  const launcher = path.join(f.root, 'delete-launcher.mjs');
+  const commands = path.join(f.root, 'deleted-threads.log');
+  await writeFile(
+    launcher,
+    `#!${process.execPath}
+import { appendFile, rm } from 'node:fs/promises';
+import path from 'node:path';
+const [operation, force, id] = process.argv.slice(2);
+if (operation !== 'delete' || force !== '--force') process.exit(2);
+await appendFile(${JSON.stringify(commands)}, id + '\\n');
+await rm(path.join(process.env.CODEX_HOME, 'sessions', 'rollout-' + id + '.jsonl'));
+`,
+    { mode: 0o700 },
+  );
+  const instance = await codexPlugin.create(
+    { model: 'synthetic', authFile: f.file, launcher },
+    f.context,
+  );
+  t.after(() => instance.dispose());
+  const before = await readFile(path.join(home, 'auth.json'), 'utf8');
+  const original = await readFile(f.file, 'utf8');
+  const handle = {
+    version: 1,
+    instanceId: 'engine',
+    targetId: 'a',
+    revision: '0'.repeat(64),
+    directoryId,
+    threadId,
+  };
+  const cleanup = [{ investigationId: 'expired', sessionHandles: [handle, handle] }];
+  await instance.pruneInvestigations!(cleanup);
+  await instance.pruneInvestigations!(cleanup);
+  assert.equal(
+    await readFile(commands, 'utf8'),
+    threadId + '\n',
+    'native deletion is deduplicated and retryable',
+  );
+  await assert.rejects(stat(workspace), { code: 'ENOENT' });
+  await assert.rejects(stat(path.join(sessionRoot, 'rollout-' + threadId + '.jsonl')), {
+    code: 'ENOENT',
+  });
+  assert.equal(
+    await readFile(path.join(sessionRoot, 'rollout-' + otherId + '.jsonl'), 'utf8'),
+    'retained transcript',
+  );
+  assert.equal(await readFile(path.join(home, 'auth.json'), 'utf8'), before);
+  assert.equal(await readFile(f.file, 'utf8'), original);
+  await assert.rejects(
+    instance.pruneInvestigations!([
+      { investigationId: 'other', sessionHandles: [{ ...handle, instanceId: 'other-engine' }] },
+    ]),
+    { code: 'SESSION_SCOPE_MISMATCH' },
+  );
+});
 async function setup(t: TestContext) {
   const f = await fixture(t);
   const file = path.join(f.root, 'auth.json');

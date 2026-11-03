@@ -133,25 +133,37 @@ export class RestMailbox {
   }
 
   async page(investigationId: string, after: number, limit: number) {
-    const selected = await this.#serial.run(async () => {
+    return this.#serial.run(async () => {
       await this.flush();
-      return [...this.#entries]
+      const selected = [...this.#entries]
         .filter(([, entry]) => entry.investigationId === investigationId && entry.cursor > after)
         .sort((a, b) => a[1].cursor - b[1].cursor)
         .slice(0, limit);
+      const messages = await Promise.all(
+        selected.map(async ([messageId]) => {
+          const { cursor, message } = await this.read(messageId);
+          return {
+            messageId,
+            cursor,
+            text: message.text,
+            ...(message.reference ? { reference: message.reference } : {}),
+          };
+        }),
+      );
+      return { messages, nextCursor: messages.at(-1)?.cursor ?? after };
     });
-    const messages = await Promise.all(
-      selected.map(async ([messageId]) => {
-        const { cursor, message } = await this.read(messageId);
-        return {
-          messageId,
-          cursor,
-          text: message.text,
-          ...(message.reference ? { reference: message.reference } : {}),
-        };
-      }),
-    );
-    return { messages, nextCursor: messages.at(-1)?.cursor ?? after };
+  }
+
+  prune(investigationIds: ReadonlySet<string>): Promise<void> {
+    return this.#serial.run(async () => {
+      await this.flush();
+      for (const [id, entry] of this.#entries) {
+        if (!entry.investigationId || !investigationIds.has(entry.investigationId)) continue;
+        await rm(path.join(this.directory, id + '.json'), { force: true });
+        this.#entries.delete(id);
+      }
+      await sync(this.directory);
+    });
   }
 
   has(id: string): boolean {
