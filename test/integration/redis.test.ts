@@ -57,6 +57,9 @@ test(
         '-d',
         '--user',
         '0',
+        // The image's default entrypoint drops root and cannot read a mode-0600 host key on Linux.
+        '--entrypoint',
+        'redis-server',
         '-p',
         '127.0.0.1::6379',
         '-v',
@@ -64,7 +67,6 @@ test(
         '-v',
         `${key}:/test/key.pem:ro`,
         image,
-        'redis-server',
         '--port',
         '0',
         '--tls-port',
