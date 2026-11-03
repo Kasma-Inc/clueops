@@ -53,3 +53,7 @@ npm run build
 ```
 
 [GitHub CI](.github/workflows/ci.yml) 在 main 推送和 PR 中验证 Node.js 22/24，并使用固定后端与临时 PostgreSQL/Redis 容器运行集成测试。集成测试准备及执行方式见[开发文档](docs/development.md#验证与依赖)。
+
+## 许可证
+
+本项目采用 [Apache License 2.0](LICENSE)。
