@@ -408,6 +408,7 @@ async function showList(version) {
           ),
           h('td', {}, targetLabel(item.targetId)),
           h('td', {}, badge(item.status)),
+          h('td', {}, item.sourceChannel || '未知'),
           h('td', {}, String(item.turnCount).padStart(2, '0')),
           h('td', { title: fullTime(item.updatedAt) }, time(item.updatedAt)),
           h(
@@ -440,7 +441,7 @@ async function showList(version) {
                   h(
                     'tr',
                     {},
-                    ['问题 / 调查编号', '排障目标', '状态', '轮次', '最近更新', '操作'].map(
+                    ['问题 / 调查编号', '排障目标', '状态', '来源', '轮次', '最近更新', '操作'].map(
                       (text) => h('th', { scope: 'col' }, text),
                     ),
                   ),
@@ -632,7 +633,11 @@ function renderTurn(turn, investigationId, version) {
         'div',
         {},
         h('strong', {}, actionNames[turn.action] || `调查轮次 ${turn.sequence}`),
-        h('div', { className: 'turn-time', title: turn.turnId }, fullTime(turn.acceptedAt)),
+        h(
+          'div',
+          { className: 'turn-time', title: turn.turnId },
+          fullTime(turn.acceptedAt) + ' · 来源：' + (turn.sourceChannel || '未知'),
+        ),
       ),
       status,
     ),
@@ -796,6 +801,7 @@ async function showDetail(id, version) {
       statusHolder.replaceChildren(badge(result.investigation.status));
       updated.textContent = time(result.investigation.updatedAt);
       roundCount.textContent = result.investigation.turnCount;
+      updateFollowupAccess();
       refreshError.textContent = '';
     } catch (error) {
       if (version === routeVersion && requestVersion === refreshVersion && token)
@@ -817,6 +823,18 @@ async function showDetail(id, version) {
   const sendError = h('p', { className: 'error-text', role: 'alert' });
   const submit = h('button', { type: 'submit', className: 'button primary' }, '提交追问 →');
   let pending;
+  let sending = false;
+  const scopeNotice = h(
+    'p',
+    { className: 'notice', hidden: true },
+    '目标配置已变化，此调查的历史记录仍可查看。继续排障请使用当前目标发起新调查。',
+  );
+  function updateFollowupAccess() {
+    const unavailable = detail.investigation.canContinue === false;
+    scopeNotice.hidden = !unavailable;
+    textarea.disabled = sending || unavailable;
+    submit.disabled = sending || unavailable;
+  }
   const followup = h(
     'form',
     {
@@ -840,8 +858,8 @@ async function showDetail(id, version) {
             investigationId: id,
             text,
           };
-        submit.disabled = true;
-        textarea.disabled = true;
+        sending = true;
+        updateFollowupAccess();
         sendError.textContent = '';
         try {
           await api('/messages', { method: 'POST', body: json(pending) });
@@ -854,13 +872,14 @@ async function showDetail(id, version) {
           if (version === routeVersion && token)
             sendError.textContent = readableError(error) + ' 原内容会保留，可再次提交。';
         } finally {
-          submit.disabled = false;
-          textarea.disabled = false;
+          sending = false;
+          updateFollowupAccess();
         }
       },
     },
     h('h2', {}, '继续追问'),
     h('p', { className: 'help' }, '补充线索或提出新问题，继续当前目标的调查。'),
+    scopeNotice,
     h('label', { htmlFor: 'followup-input' }, '追问内容'),
     textarea,
     sendError,
@@ -911,6 +930,7 @@ async function showDetail(id, version) {
           { className: 'panel' },
           h('h2', {}, '调查信息'),
           info('排障目标', detail.investigation.targetId),
+          info('发起来源', detail.investigation.sourceChannel || '未知'),
           info('调查轮次', roundCount),
           info('创建时间', fullTime(detail.investigation.createdAt)),
           smallLabel('调查编号'),
@@ -936,6 +956,7 @@ async function showDetail(id, version) {
     ),
   );
   drawTurns();
+  updateFollowupAccess();
   schedulePoll();
 }
 

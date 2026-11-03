@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import type {
-  ChannelManagementAccess,
+  InvestigationReadAccess,
   InvestigationQuery,
   InvestigationTurnStatus,
   Principal,
@@ -52,7 +52,7 @@ function number(value: string | null, fallback: number, max: number, min = 1): n
 export async function managementResponse(
   url: URL,
   principal: Principal,
-  access: ChannelManagementAccess | undefined,
+  access: InvestigationReadAccess | undefined,
 ): Promise<unknown> {
   if (!access) throw new HostError('ACCESS_DENIED');
   const match = /^\/api\/investigations\/([A-Za-z0-9_-]{1,128})(\/evidence)?$/.exec(url.pathname);

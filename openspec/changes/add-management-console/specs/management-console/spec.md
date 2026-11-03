@@ -2,10 +2,10 @@
 
 ### Requirement: Scoped management reads
 
-The system SHALL 在 REST 身份的当前渠道、租户、会话与目标授权范围内列出调查、读取详情与证据，并在分页之前过滤不可访问的调查。
+The system SHALL 在当前认证主体的目标授权范围内列出调查、读取详情与证据，并在分页之前过滤不可访问的调查。
 
 #### Scenario: Unauthorized source
-- **WHEN** 调用者尝试读取其他来源或当前无权访问目标的调查
+- **WHEN** 调用者尝试读取当前无权访问目标的调查
 - **THEN** 系统拒绝详情和证据读取，并且列表不包含该调查
 
 ### Requirement: Read-only target overview

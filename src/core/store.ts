@@ -279,8 +279,7 @@ export class InvestigationStore {
         records.some(
           (a, index) =>
             a.sequence !== index + 1 ||
-            fingerprint(a.request.scope.target) !== fingerprint(first.request.scope.target) ||
-            fingerprint(a.request.message.address) !== fingerprint(first.request.message.address),
+            fingerprint(a.request.scope.target) !== fingerprint(first.request.scope.target),
         )
       )
         throw new HostError('STATE_CORRUPT');
@@ -479,9 +478,7 @@ export class InvestigationStore {
         principal.senderId !== record.request.message.senderId ||
         fingerprint(address) !== fingerprint(record.request.message.address) ||
         history.some(
-          (a) =>
-            fingerprint(a.request.scope.target) !== fingerprint(record.request.scope.target) ||
-            fingerprint(a.request.message.address) !== fingerprint(record.request.message.address),
+          (a) => fingerprint(a.request.scope.target) !== fingerprint(record.request.scope.target),
         )
       )
         throw new HostError('ACCEPTANCE_CONFLICT');

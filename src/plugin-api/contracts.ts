@@ -1,4 +1,4 @@
-import type { ChannelManagementAccess } from './management.js';
+import type { InvestigationReadAccess } from './investigations.js';
 
 export type JsonValue = null | boolean | number | string | JsonObject | readonly JsonValue[];
 export interface JsonObject {
@@ -308,10 +308,10 @@ export interface MessageChannel {
   update(receipt: DeliveryReceipt, message: OutboundMessage): Promise<DeliveryReceipt>;
 }
 
-/** Read-only authorization against the current principal, source and target scope. */
+/** Read-only authorization against the current caller’s target grants; transport origin is metadata. */
 export interface ChannelReadAccess {
   authorizeInvestigation(principal: Principal, investigationId: string): void;
-  readonly management?: ChannelManagementAccess;
+  readonly investigations?: InvestigationReadAccess;
 }
 
 export type CapabilityKind = 'engine' | 'tools' | 'channel';

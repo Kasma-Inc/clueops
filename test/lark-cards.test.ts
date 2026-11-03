@@ -50,7 +50,6 @@ test('all notices offer Chinese guidance and hide diagnostic codes, with target 
   const codes = [
     'TARGET_REQUIRED',
     'ACCESS_DENIED',
-    'CONVERSATION_MISMATCH',
     'TARGET_CONFLICT',
     'EVENT_NOT_FOUND',
     'REFERENCE_UNKNOWN',

@@ -419,7 +419,7 @@ test('REST requires one investigation, filters before pagination, and invokes cu
   assert.equal((await page('event')).status, 403, 'missing host authorization fails closed');
 });
 
-test('REST history reads reject another source and revoked target permissions even for known investigation IDs', async (t) => {
+test('REST authorizes cross-channel investigation references and still enforces current target grants', async (t) => {
   const f = await fixture(t);
   const stateDirectory = path.join(f.root, 'state');
   let config = {
@@ -467,7 +467,7 @@ test('REST history reads reject another source and revoked target permissions ev
     await coordinator!.idle();
     const query = '?investigationId=' + accepted.investigationId;
     assert.equal((await fetch(url(channel) + query, { headers })).status, 200);
-    assert.equal((await fetch(url(other) + query, { headers })).status, 403);
+    assert.equal((await fetch(url(other) + query, { headers })).status, 200);
     assert.equal(
       (
         await post(url(other), {
@@ -477,7 +477,7 @@ test('REST history reads reject another source and revoked target permissions ev
           investigationId: accepted.investigationId,
         })
       ).status,
-      422,
+      202,
     );
     await coordinator!.close();
     config = {

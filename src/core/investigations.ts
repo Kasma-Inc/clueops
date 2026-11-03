@@ -1,16 +1,15 @@
 import type {
-  ChannelManagementAccess,
+  InvestigationReadAccess,
   InvestigationQuery,
   InvestigationSummary,
   Principal,
 } from '../plugin-api/index.js';
 import { HostError } from './errors.js';
-import { fingerprint } from './identity.js';
 import type { PluginHost } from './host.js';
 import type { Acceptance, InvestigationStore } from './store.js';
 
 /** Reads existing durable state; never exposes plugin configuration or session handles. */
-export class ManagementReader implements ChannelManagementAccess {
+export class InvestigationReader implements InvestigationReadAccess {
   constructor(
     private readonly host: PluginHost,
     private readonly store: InvestigationStore,
@@ -25,20 +24,11 @@ export class ManagementReader implements ChannelManagementAccess {
   }
 
   private authorizeFirst(principal: Principal, first: Acceptance | undefined): void {
-    if (
-      !first ||
-      fingerprint(first.request.message.address) !==
-        fingerprint({
-          channelInstanceId: principal.channelInstanceId,
-          tenantId: principal.tenantId,
-          conversationId: principal.conversationId,
-        })
-    )
-      throw new HostError('ACCESS_DENIED');
-    this.host.restore(principal, first.request.scope.target);
+    if (!first) throw new HostError('ACCESS_DENIED');
+    this.host.authorize(principal, first.request.scope.target.targetId);
   }
 
-  private summary(history: readonly Acceptance[]): InvestigationSummary {
+  private summary(history: readonly Acceptance[], principal: Principal): InvestigationSummary {
     const first = history[0]!;
     const diagnostic = history.filter(
       (a) => !a.request.message.action || a.request.message.action === 'continue',
@@ -48,6 +38,10 @@ export class ManagementReader implements ChannelManagementAccess {
       investigationId: first.request.investigationId,
       targetId: first.request.scope.target.targetId,
       title: this.host.redactor.text(first.request.message.text).slice(0, 240),
+      sourceChannel: first.request.message.address.channelInstanceId,
+      canContinue:
+        this.host.authorize(principal, first.request.scope.target.targetId).target.revision ===
+        first.request.scope.target.revision,
       status: this.store.turn(latest.request.turnId).status,
       createdAt: first.acceptedAt,
       updatedAt: history.reduce((date, a) => {
@@ -71,16 +65,12 @@ export class ManagementReader implements ChannelManagementAccess {
         try {
           this.authorizeFirst(principal, history[0]);
         } catch (error) {
-          if (
-            error instanceof HostError &&
-            ['ACCESS_DENIED', 'TARGET_SCOPE_CHANGED'].includes(error.code)
-          )
-            return [];
+          if (error instanceof HostError && error.code === 'ACCESS_DENIED') return [];
           throw error;
         }
         const latest = history.at(-1)!;
         const cursor = latest.acceptedAt + '|' + id;
-        const summary = this.summary(history);
+        const summary = this.summary(history, principal);
         if (
           (query.before !== undefined && cursor >= query.before) ||
           (query.targetId && summary.targetId !== query.targetId) ||
@@ -117,6 +107,7 @@ export class ManagementReader implements ChannelManagementAccess {
         return {
           turnId: a.request.turnId,
           sequence: a.sequence,
+          sourceChannel: a.request.message.address.channelInstanceId,
           text: this.host.redactor.text(a.request.message.text),
           ...(a.request.message.action ? { action: a.request.message.action } : {}),
           acceptedAt: a.acceptedAt,
@@ -132,7 +123,7 @@ export class ManagementReader implements ChannelManagementAccess {
       }),
     );
     return {
-      investigation: this.summary(history),
+      investigation: this.summary(history, principal),
       turns,
       nextBefore: matching.length > page.length ? page[0]!.sequence : null,
     };

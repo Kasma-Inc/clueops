@@ -11,6 +11,8 @@ async function checkAdminConsole(page) {
     targetId: i % 2 ? 'prod' : 'dev',
     title: `问题 ${i} ${i % 2 ? '生产' : '开发'}`,
     status: i % 3 ? 'completed' : 'failed',
+    sourceChannel: i % 2 ? 'lark' : 'http',
+    canContinue: true,
     turnCount: 1,
     createdAt: '2026-11-03T01:00:00.000Z',
     updatedAt: '2026-11-03T01:01:00.000Z',
@@ -39,6 +41,7 @@ async function checkAdminConsole(page) {
   let holdEvidence;
   let releaseEvidence;
   let historySize = 1;
+  let canContinue = true;
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   let targetFailure = false;
@@ -141,7 +144,7 @@ async function checkAdminConsole(page) {
         ? { facts: [], hypotheses: [], recommendations: ['fixture report'], missingEvidence: [] }
         : undefined;
     return response(route, {
-      investigation: { ...data[0], status: detailStatus },
+      investigation: { ...data[0], status: detailStatus, canContinue },
       turns: [
         {
           turnId: 'turn-1',
@@ -170,6 +173,14 @@ async function checkAdminConsole(page) {
   });
   await page.goto(base + '/admin/#investigations');
   await login();
+  await waitFor(() => document.querySelectorAll('tbody tr').length === 20);
+  check(
+    await page
+      .locator('tbody tr')
+      .evaluateAll((rows) => new Set(rows.map((row) => row.cells[3].textContent)).size === 2),
+    '不同来源的调查没有同时展示或来源列缺失',
+  );
+  passed.push('混合渠道记录同时展示，来源仅作为元数据');
   let countBefore = requests.length;
   await page.getByRole('combobox', { name: '按目标筛选' }).selectOption('prod');
   check(requests.length === countBefore, '切换目标不应自动提交筛选');
@@ -353,6 +364,24 @@ async function checkAdminConsole(page) {
     '补读轮次有缺失或重复',
   );
   passed.push('一次新增超过20轮后补齐中间缺页');
+  mode = '';
+  canContinue = false;
+  await page.evaluate(() => {
+    location.hash = '#investigation/event-old-scope';
+  });
+  await page
+    .getByText('目标配置已变化，此调查的历史记录仍可查看。继续排障请使用当前目标发起新调查。')
+    .waitFor();
+  check(
+    await page.getByRole('button', { name: '提交追问 →' }).isDisabled(),
+    '配置已变化的历史调查仍允许追问',
+  );
+  check(
+    await page.getByRole('textbox', { name: '追问内容' }).isDisabled(),
+    '历史调查没有禁用追问输入',
+  );
+  passed.push('旧配置调查保留历史报告并明确禁用执行');
+  canContinue = true;
   await page.getByRole('link', { name: '排障记录', exact: true }).click();
   mode = 'transient-detail';
   detailReads = 0;

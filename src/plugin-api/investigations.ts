@@ -18,6 +18,8 @@ export interface InvestigationSummary {
   readonly investigationId: string;
   readonly targetId: string;
   readonly title: string;
+  readonly sourceChannel: string;
+  readonly canContinue: boolean;
   readonly status: InvestigationTurnStatus;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -30,6 +32,7 @@ export interface InvestigationPage {
 export interface InvestigationTurn {
   readonly turnId: string;
   readonly sequence: number;
+  readonly sourceChannel: string;
   readonly text: string;
   readonly action?: string;
   readonly acceptedAt: string;
@@ -63,7 +66,7 @@ export interface TargetOverview {
 }
 
 /** Host-owned read model. Each operation must recheck the supplied principal's current scope. */
-export interface ChannelManagementAccess {
+export interface InvestigationReadAccess {
   listInvestigations(principal: Principal, query: InvestigationQuery): InvestigationPage;
   getInvestigation(
     principal: Principal,

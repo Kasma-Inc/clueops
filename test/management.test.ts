@@ -88,7 +88,7 @@ async function setup(t: Parameters<typeof fixture>[0]) {
   };
 }
 
-test('management console is opt-in, serves a CSP-protected shell, and authenticates all data routes', async (t) => {
+test('console UI is opt-in while authenticated domain reads are independent of the UI and channel', async (t) => {
   const f = await setup(t);
   const run = await f.start();
   for (const resource of ['/admin', '/admin/', '/admin/app.js', '/admin/style.css']) {
@@ -106,7 +106,10 @@ test('management console is opt-in, serves a CSP-protected shell, and authentica
     '/api/investigations/unknown/evidence?turnId=x',
   ]) {
     assert.equal((await fetch(run.base() + resource)).status, 401);
-    assert.equal((await run.get(resource, 'plain')).status, 404);
+    assert.equal(
+      (await run.get(resource, 'plain')).status,
+      resource === '/api/targets' || resource === '/api/investigations' ? 200 : 403,
+    );
   }
   assert.equal(
     (await fetch(run.base() + '/api/targets', { method: 'POST', headers, body: '{}' })).status,
@@ -148,6 +151,11 @@ test('management lists only authorized investigations before pagination, redacts
   page = (await (
     await run.get('/api/investigations?limit=1&before=' + page.nextBefore)
   ).json()) as InvestigationPage;
+  assert.notEqual(page.investigations[0]!.investigationId, first.investigationId);
+  assert.ok(page.nextBefore);
+  page = (await (
+    await run.get('/api/investigations?limit=1&before=' + encodeURIComponent(page.nextBefore!))
+  ).json()) as InvestigationPage;
   assert.equal(page.investigations[0]!.investigationId, first.investigationId);
   assert.equal(page.nextBefore, null);
   assert.ok(!JSON.stringify(page).includes('private-value'));
@@ -159,7 +167,7 @@ test('management lists only authorized investigations before pagination, redacts
   assert.equal(filtered.investigations.length, 1);
   assert.equal(
     (await run.get('/api/investigations/' + first.investigationId, 'other')).status,
-    403,
+    200,
   );
   assert.equal((await run.get('/api/investigations/unknown')).status, 403);
   await run.post({
@@ -215,7 +223,7 @@ test('management details, evidence previews and follow-ups paginate safely and s
   assert.ok(evidence.evidence[0]!.previewTruncated);
   assert.equal(evidence.evidence[0]!.contentPreview.length, 12000);
   assert.ok(!JSON.stringify(evidence).includes('TEST_SECRET_a-tools'));
-  assert.equal((await run.get(evidenceRoute, 'other')).status, 403);
+  assert.equal((await run.get(evidenceRoute, 'other')).status, 200);
   assert.equal((await run.get(route + '/evidence?turnId=unknown')).status, 403);
   assert.equal((await run.get(route + '/evidence')).status, 400);
   assert.equal((await run.get(evidenceRoute + '&offset=-1')).status, 400);

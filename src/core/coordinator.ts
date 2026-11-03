@@ -18,7 +18,7 @@ import { PluginHost } from './host.js';
 import { HostError, TargetSelectionRequired } from './errors.js';
 import { fingerprint, messageKey } from './identity.js';
 import { InvestigationStore } from './store.js';
-import { ManagementReader } from './management.js';
+import { InvestigationReader } from './investigations.js';
 import type { Acceptance, Delivery } from './store.js';
 import { SerialQueue } from './serial.js';
 import { Semaphore } from './semaphore.js';
@@ -58,11 +58,11 @@ export class InvestigationCoordinator {
     if (this.#closed) return;
     await this.reconcile();
     if (this.#closed) return;
-    const management = new ManagementReader(this.host, this.store);
+    const investigations = new InvestigationReader(this.host, this.store);
     await this.host.start(
       (message, reception) => this.handle(message, reception),
-      (principal, investigationId) => management.authorize(principal, investigationId),
-      management,
+      (principal, investigationId) => investigations.authorize(principal, investigationId),
+      investigations,
     );
     if (this.#closed) return;
     this.schedule();
@@ -131,7 +131,7 @@ export class InvestigationCoordinator {
         });
         const duplicate = this.store.find(messageKey(source));
         if (duplicate) {
-          this.host.restore(principal, duplicate.request.scope.target);
+          this.host.authorize(principal, duplicate.request.scope.target.targetId);
           if (
             fingerprint(source) !==
             (duplicate.inputFingerprint ?? fingerprint(duplicate.request.message))
@@ -219,7 +219,6 @@ export class InvestigationCoordinator {
         error instanceof HostError &&
         [
           'ACCESS_DENIED',
-          'CONVERSATION_MISMATCH',
           'TARGET_CONFLICT',
           'EVENT_NOT_FOUND',
           'REFERENCE_UNKNOWN',
@@ -246,10 +245,12 @@ export class InvestigationCoordinator {
   private scopeFor(message: ChannelMessage, linked?: Acceptance) {
     const principal: Principal = { ...message.address, senderId: message.senderId };
     if (linked) {
-      if (fingerprint(message.address) !== fingerprint(linked.request.message.address))
-        throw new HostError('CONVERSATION_MISMATCH');
       if (message.targetId && message.targetId !== linked.request.scope.target.targetId)
         throw new HostError('TARGET_CONFLICT');
+      if (message.action && message.action !== 'continue') {
+        this.host.authorize(principal, linked.request.scope.target.targetId);
+        return { principal, target: linked.request.scope.target };
+      }
       return this.host.restore(principal, linked.request.scope.target);
     }
     return this.host.authorize(principal, message.targetId);
@@ -470,7 +471,7 @@ export class InvestigationCoordinator {
       releaseTarget = await semaphore.acquire(signal);
       releaseGlobal = await this.#global.acquire(signal);
       if (this.store.turn(request.turnId).status !== 'queued') return;
-      this.host.restore(request.scope.principal, request.scope.target);
+      this.host.validateTarget(request.scope.target);
       await this.store.setTurn(request.turnId, 'running');
       started = true;
       this.metrics.turns++;
@@ -722,9 +723,9 @@ export class InvestigationCoordinator {
       try {
         channel = this.host.channelFor(request.message.address.channelInstanceId);
       } catch (error) {
-        // A removed/disabled source delays presentation; it must not prevent other channels starting.
-        if (error instanceof HostError && error.code === 'CHANNEL_NOT_FOUND') return;
-        throw error;
+        // Persist a generic delivery plan even without the adapter, so handled controls
+        // keep their exact result and can be delivered later without repeating effects.
+        if (!(error instanceof HostError) || error.code !== 'CHANNEL_NOT_FOUND') throw error;
       }
       const prefix = `事件 ${request.investigationId}\n轮次 ${request.turnId}\n`;
       const safeReport = details.report
@@ -740,7 +741,7 @@ export class InvestigationCoordinator {
         ...(safeReport ? { report: safeReport } : {}),
         ...(request.message.action ? { action: request.message.action } : {}),
       };
-      const parts = channel.renderReply
+      const parts = channel?.renderReply
         ? channel.renderReply(reply, this.host.runtime.maxMessageBytes)
         : chunks(
             reply.text,
@@ -801,7 +802,16 @@ export class InvestigationCoordinator {
         const request = this.store
           .acceptances()
           .find((a) => a.request.turnId === delivery.message.reference?.turnId)!.request;
-        this.host.restore(request.scope.principal, request.scope.target);
+        let channel;
+        try {
+          channel = this.host.channelFor(delivery.message.address.channelInstanceId);
+        } catch (error) {
+          if (error instanceof HostError && error.code === 'CHANNEL_NOT_FOUND') return;
+          throw error;
+        }
+        // Delivery remains bound to its original recipient. Current target grants,
+        // not execution scope revisions or a retrier's identity, decide whether it may send.
+        this.host.authorize(request.scope.principal, request.scope.target.targetId);
         delivery = await this.store.saveDelivery({
           ...delivery,
           status: 'sending',
@@ -809,7 +819,7 @@ export class InvestigationCoordinator {
         });
         const receipt = validators.deliveryReceipt.parse(
           await withDeadline(
-            this.host.channelFor(delivery.message.address.channelInstanceId).send(delivery.message),
+            channel.send(delivery.message),
             this.host.runtime.messageTimeoutMs,
             this.#abort.signal,
           ),
@@ -840,17 +850,7 @@ export class InvestigationCoordinator {
         a.request.message.action !== 'continue' &&
         this.store.turn(a.request.turnId).status === 'queued'
       ) {
-        try {
-          this.host.restore(a.request.scope.principal, a.request.scope.target);
-          await this.control(a, true);
-        } catch (error) {
-          if (
-            !(error instanceof HostError) ||
-            !['ACCESS_DENIED', 'TARGET_SCOPE_CHANGED'].includes(error.code)
-          )
-            throw error;
-          await this.store.setTurn(a.request.turnId, 'failed', { failure: error.code });
-        }
+        await this.control(a, true);
       }
     for (const a of this.store.acceptances()) {
       await this.acceptedMessage(a);

@@ -3,7 +3,7 @@ import { validators } from '../plugin-api/index.js';
 import type {
   AgentEngine,
   ChannelReadAccess,
-  ChannelManagementAccess,
+  InvestigationReadAccess,
   InvestigationScope,
   MessageHandler,
   PluginScope,
@@ -179,7 +179,8 @@ export class PluginHost {
     return current;
   }
 
-  private currentTarget(snapshot_: TargetSnapshot): TargetSnapshot {
+  /** Validate the scope of already-authorized durable work without depending on its input adapter. */
+  validateTarget(snapshot_: TargetSnapshot): TargetSnapshot {
     this.assertOpen();
     const current = this.#targets.get(snapshot_.targetId);
     if (!current || current.revision !== snapshot_.revision)
@@ -188,14 +189,14 @@ export class PluginHost {
   }
 
   engineFor(target: TargetSnapshot): AgentEngine {
-    return this.#plugins.get(this.currentTarget(target).engine.instanceId)!.instance.engine!;
+    return this.#plugins.get(this.validateTarget(target).engine.instanceId)!.instance.engine!;
   }
 
   toolsFor(
     target: TargetSnapshot,
   ): readonly { readonly instanceId: string; readonly provider: ToolProvider }[] {
     return Object.freeze(
-      this.currentTarget(target).tools.map((scope) => ({
+      this.validateTarget(target).tools.map((scope) => ({
         instanceId: scope.instanceId,
         provider: this.#plugins.get(scope.instanceId)!.provider!,
       })),
@@ -212,7 +213,7 @@ export class PluginHost {
   async start(
     handler: MessageHandler,
     authorizeRead?: ChannelReadAccess['authorizeInvestigation'],
-    management?: ChannelManagementAccess,
+    investigations?: InvestigationReadAccess,
   ): Promise<void> {
     if (this.#phase !== 'prepared') throw new HostError('HOST_STATE_INVALID');
     this.#phase = 'starting';
@@ -243,19 +244,22 @@ export class PluginHost {
             this.#startAbort.signal,
             authorizeRead
               ? {
-                  ...(management
+                  ...(investigations
                     ? {
-                        management: {
+                        investigations: {
                           listInvestigations: (incoming, query) =>
-                            management.listInvestigations(this.readPrincipal(incoming, id), query),
+                            investigations.listInvestigations(
+                              this.readPrincipal(incoming, id),
+                              query,
+                            ),
                           getInvestigation: (incoming, investigationId, query) =>
-                            management.getInvestigation(
+                            investigations.getInvestigation(
                               this.readPrincipal(incoming, id),
                               investigationId,
                               query,
                             ),
                           listEvidence: (incoming, investigationId, turnId, offset, limit) =>
-                            management.listEvidence(
+                            investigations.listEvidence(
                               this.readPrincipal(incoming, id),
                               investigationId,
                               turnId,
@@ -263,8 +267,8 @@ export class PluginHost {
                               limit,
                             ),
                           listTargets: (incoming) =>
-                            management.listTargets(this.readPrincipal(incoming, id)),
-                        } satisfies ChannelManagementAccess,
+                            investigations.listTargets(this.readPrincipal(incoming, id)),
+                        } satisfies InvestigationReadAccess,
                       }
                     : {}),
                   authorizeInvestigation: (incoming, investigationId) => {

@@ -184,13 +184,13 @@ export class RestChannel implements MessageChannel {
       reply(response, 401, { error: 'UNAUTHORIZED' });
       return;
     }
-    if (this.config.admin && url.pathname.startsWith('/api/')) {
+    if (url.pathname.startsWith('/api/')) {
       if (request.method !== 'GET') return reply(response, 405, { error: 'METHOD_NOT_ALLOWED' });
       try {
         const result = await managementResponse(
           url,
           { ...this.#address, senderId: this.config.senderId },
-          this.#readAccess?.management,
+          this.#readAccess?.investigations,
         );
         return reply(response, 200, result);
       } catch (error) {
