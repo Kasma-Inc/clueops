@@ -1,0 +1,12 @@
+# 可选的第二环境示例：在全局 targets 登记并在渠道 routes 中授权后才加载。
+# 本目标只启用 K8s，不会自动继承 prod-a 的数据库、GitHub 或全局共享工具。
+# 相对路径以当前文件为基准；复制到 private/targets 后引用 private/credentials/。
+tools:
+  # 可以和 prod-a 使用相同 name；不同目标各自声明的工具是独立实例。
+  - name: k8s
+    plugin: kubernetes
+    config:
+      kubeconfig: ../credentials/prod-b.kubeconfig
+      # 明确选择 B 的 context，不使用 kubeconfig 的 current-context。
+      context: REPLACE_CONTEXT_B
+      # namespace、资源及动作权限由此kubeconfig身份的Kubernetes RBAC决定。

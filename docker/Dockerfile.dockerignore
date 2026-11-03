@@ -1,0 +1,27 @@
+# 只允许构建需要的公开文件进入上下文，私有配置、状态和宿主依赖均不发送给 Docker。
+# 与 Dockerfile 同目录并使用 Dockerfile.dockerignore 命名，作用于项目根目录上下文。
+**
+!docker/
+!docker/Dockerfile
+!docker/Dockerfile.dockerignore
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!src/**
+!tools/
+!tools/install-backends.mjs
+!tools/backends.lock.json
+!tools/codex-launcher.mjs
+!tools/build-prompts.mjs
+!tools/dbhub/
+!tools/dbhub/package.json
+!tools/dbhub/package-lock.json
+!tools/redis/
+!tools/redis/requirements.txt
+!examples/
+!examples/**
+!prompts/
+!prompts/**
+src/generated/prompts/
+**/node_modules/

@@ -1,0 +1,10 @@
+# 离线目标 A，不连接实际集群。相对路径从当前文件 examples/demo/targets/ 开始计算。
+tools:
+  # name 标识本目标内的连接，plugin 指向提供能力的代码，config 只属于当前实例。
+  - name: logs
+    plugin: ../plugins/fixture.mjs
+    config:
+      resourceId: synthetic-cluster-a
+      namespaces:
+        - example-namespace
+      credential: EXAMPLE_ONLY

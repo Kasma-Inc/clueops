@@ -1,0 +1,44 @@
+# 固定项目名，移动 Compose 文件后继续使用同一命名状态卷。
+name: clueops
+
+services:
+  clueops:
+    build:
+      # Compose 相对路径以 docker/ 为基准；Dockerfile 路径以构建上下文为基准。
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: clueops:local
+    # 镜像内置 tini，负责回收 Codex/MCP 子进程并转发停止信号。
+    # 允许非root的bubblewrap创建用户命名空间；模型命令仍受Codex内部权限/沙箱限制。
+    # 不添加privileged或SYS_ADMIN。外层Docker默认seccomp过滤因此不再应用，详见README。
+    security_opt:
+      - seccomp=unconfined
+    restart: unless-stopped
+    # 留出时间取消调查、关闭后端并释放状态文件锁。
+    stop_grace_period: 1m
+    volumes:
+      # 包含 config.yaml、targets/、credentials/ 及可选的插件、知识和 skills/。
+      # 目录不存在时直接报错，避免自动创建空目录造成误配置。
+      - type: bind
+        source: ../private
+        target: /app/private
+        read_only: true
+        bind:
+          create_host_path: false
+      # 与 examples/live/config.yaml 的 runtime.stateDirectory 对应。
+      # 只挂载 state，避免覆盖镜像中 .clueops/bin 下的 MCP 二进制。
+      - type: volume
+        source: clueops-state
+        target: /app/.clueops/state
+    # Lark无需端口映射。启用REST时，渠道host设0.0.0.0，再取消下面的注释。
+    # ports:
+    #   - '127.0.0.1:8080:8080'
+    # 模型/MCP的本机接口仅供容器内进程使用。
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  clueops-state:

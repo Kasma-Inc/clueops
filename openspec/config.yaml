@@ -1,0 +1,41 @@
+schema: spec-driven
+
+context: |
+  Language: zh-CN
+  All artifacts must be written in zh-CN.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+  ClueOps（寻迹）是独立的 TypeScript 插件式排障项目。包名、MCP 客户端、部署资源与默认状态目录统一使用 clueops。当前实现进度以活跃 change 和源码为准。
+  The product investigates incidents from error logs and explicit diagnostic targets.
+  Codex is the initial agent runtime; product naming and shared contracts must remain runtime-independent.
+  This is a plugin-based project. Agent runtimes, diagnostic tools, and messaging channels must be loaded and composed through plugin contracts and configuration without vendor-specific branches in Core.
+  Core owns investigation events, sessions, target scope, configuration resolution, and execution coordination. Do not build unused plugin implementations, a marketplace, or hot-reload infrastructure.
+  Tools supply live evidence and enforce resource access; skills supply investigation knowledge and workflows.
+  Connection settings and credentials are file-configured; real credential-bearing files stay outside version control and agent context.
+  Multiple Kubernetes clusters and database connections must be managed together without mixing investigation scopes or credentials.
+  Local model commands use Codex native filesystem permission profiles: only the current investigation workspace, staged target skills and explicit extra paths are accessible. Credentials and other investigations remain outside that scope. Keep the host, Codex runtime authentication and tool-server trust boundary separate from command permissions; remote account permissions remain independently enforced.
+  Reuse containers/kubernetes-mcp-server, DBHub (first validated against PostgreSQL), and the official GitHub MCP for live evidence. Plugins own target binding, policy, lifecycle, and evidence conversion; do not reimplement their query tools.
+  Each Kubernetes MCP backend receives only one target cluster kubeconfig. Relay the upstream core tools and their actual side-effect annotations; Kubernetes RBAC controls namespace/resource/action permissions, without host-maintained access allowlists. Credentials/configuration tools remain outside the cluster toolset; keep target binding, redaction, lifecycle and result budgets.
+  The first release includes a Lark channel plugin for investigation requests, follow-ups, and reports. DingTalk and WeCom are later channel plugins using the same core contracts.
+  Keep the investigation core independently verifiable. Automated alert ingestion and production changes are outside the initial scope.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

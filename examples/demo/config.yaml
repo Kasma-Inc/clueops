@@ -1,0 +1,23 @@
+# 离线示例：仅使用 examples/demo/plugins/fixture.mjs，不连接 K8s、数据库或 Lark。
+# 验证命令：npm run check-config -- --config examples/demo/config.yaml
+# 接入实际环境请复制 examples/live 到 private，不必修改这套合成示例。
+version: 1
+agent:
+  # plugin 也可以直接指向模块文件；相对路径以当前 YAML 为基准。
+  plugin: ./plugins/fixture.mjs
+  config: { resourceId: synthetic-engine, credential: EXAMPLE_ONLY }
+targets:
+  # 目标文件自行声明工具，两者使用同一插件但各自绑定不同的合成资源。
+  cluster-a: ./targets/cluster-a.yaml
+  cluster-b: ./targets/cluster-b.yaml
+channels:
+  # chat 是渠道实例名，不代表插件类型。
+  chat:
+    plugin: ./plugins/fixture.mjs
+    config: { resourceId: synthetic-chat, credential: EXAMPLE_ONLY }
+    # 合成渠道的授权示例，不是实际 Lark 的租户、群或用户 ID。
+    routes:
+      - tenant: example-tenant
+        conversation: example-room
+        allowedSenders: [example-user]
+        targets: [cluster-a, cluster-b]

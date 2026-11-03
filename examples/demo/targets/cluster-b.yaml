@@ -1,0 +1,9 @@
+# 离线目标 B，仅由 demo/config.yaml 引用；与 A 使用相同插件和 name，但实例独立。
+tools:
+  - name: logs
+    plugin: ../plugins/fixture.mjs
+    config:
+      resourceId: synthetic-cluster-b
+      namespaces:
+        - example-namespace
+      credential: EXAMPLE_ONLY

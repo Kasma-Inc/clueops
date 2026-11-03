@@ -1,0 +1,9 @@
+{
+  "name": "clueops-dbhub-backend",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@bytebase/dbhub": "1.5.0",
+    "pg": "8.23.1"
+  }
+}

@@ -1,0 +1,75 @@
+# prod-a 排障环境：集群 + 业务数据库 + 源码。
+# 复制到 private/targets/prod-a.yaml 后填写；相对路径以此目标文件为基准。
+# 每个环境独立选择工具，不必集齐下面三项；不需要的工具直接删除对应列表项。
+# name 是本目标内唯一的实例名；plugin 选择代码实现；config 填该实例的连接与权限。
+tools:
+  # 可选Redis：需要时取消注释并填写本环境连接；必填仅name/plugin/config.host。
+  # - name: cache
+  #   plugin: redis
+  #   config:
+  #     host: REPLACE_REDIS_HOST
+  #     port: 6379 # 选填，默认6379
+  #     database: 0 # 选填，默认0；不是ACL权限边界
+  #     username: diagnostic_reader # 选填，省略使用default
+  #     passwordFile: ../credentials/redis.password # 选填，与password二选一
+  #     tls: {} # 选填；配置则开启TLS并验证证书，完整选项见README
+  #     maxItems: 100 # 选填，扫描提示/范围上限，默认100
+  - name: k8s
+    plugin: kubernetes
+    config:
+      # 复制后指向 private/credentials/prod-a.kubeconfig，不使用个人默认 kubeconfig。
+      kubeconfig: ../credentials/prod-a.kubeconfig
+      # 必须明确选定上述 kubeconfig 中的 context，不跟随 current-context。
+      context: REPLACE_CONTEXT_A
+      # namespace、资源及动作权限由此kubeconfig身份的Kubernetes RBAC决定。
+
+  # 一个数据库连接一个工具实例；有第二个库时复制此项并使用不同 name。
+  - name: orders-db
+    plugin: database
+    config:
+      # source 是 database 插件的连接参数，不是另一种工具分类。
+      source:
+        # 首版实测 PostgreSQL；其他数据库的部署与验收要求见 README。
+        type: postgres
+        host: REPLACE_DB_HOST
+        port: 5432
+        database: REPLACE_DATABASE
+        # 使用已配置原生只读权限的数据库账户，授权示例见 examples/postgres-reader.sql。
+        user: diagnostic_reader
+        # 或删掉 password 改用 passwordFile: ../credentials/orders-db.password，二选一。
+        password: REPLACE_DATABASE_PASSWORD
+        # 示例使用 TLS 主机名与 CA 校验，按实际证书配置填写 host 和 CA 文件。
+        sslmode: verify-full
+        sslrootcert: ../credentials/postgres-ca.pem
+
+  - name: app-code
+    plugin: github
+    config:
+      # 使用只读 Token；或删掉 token 改用 tokenFile: ../credentials/github.token。
+      token: REPLACE_GITHUB_TOKEN
+      # 仓库权限直接由GitHub按Token决定；支持原生搜索及tag/分支/SHA读取。
+
+  # 可选：一台服务器一个SSH实例；再添加一个不同name即可连接另一台。
+  # - name: app-server
+  #   plugin: ssh
+  #   config:
+  #     host: app.example.com
+  #     user: reader
+  #     knownHostsFile: ../credentials/app_known_hosts
+  #     auth:
+  #       type: private-key
+  #       privateKeyFile: ../credentials/app_ed25519
+  #       # 加密私钥可加passphraseFile；它是解锁密钥的口令，不是账户密码。
+  #       # passphraseFile: ../credentials/app_key.passphrase
+  #     # 密码登录改为auth: {type: password, passwordFile: ../credentials/app.password}
+  #     # 密钥后再验证账户密码：type: private-key+password，另加passwordFile。
+
+# 可选：本目标的排障知识，影响调查方法，不增加工具授权。
+# 下面路径按复制到 private/targets 后的位置编写，指向项目 examples/knowledge/。
+knowledge:
+  - ../../examples/knowledge/investigation.md
+
+# 可选：单技能目录、SKILL.md，或包含多个技能包的目录。
+# 路径以本文件为基准；下面按复制到 private/targets 后的位置编写。
+# skills:
+#   - ../skills

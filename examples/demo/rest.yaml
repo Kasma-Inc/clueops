@@ -1,0 +1,27 @@
+# 可直接用curl测试：合成Agent/数据源，不调用模型、集群、数据库或Lark。
+# npm run build && npm start -- --config examples/demo/rest.yaml
+version: 1
+runtime:
+  stateDirectory: ../../.clueops/demo-rest
+agent:
+  plugin: ./plugins/fixture.mjs
+  config: { resourceId: synthetic-engine, credential: EXAMPLE_ONLY }
+targets:
+  cluster-a: ./targets/cluster-a.yaml
+  cluster-b: ./targets/cluster-b.yaml
+channels:
+  http:
+    plugin: rest
+    config:
+      host: 127.0.0.1
+      port: 8080
+      # 仅用于离线示例，接真实环境时更换随机Token，或使用tokenFile。
+      token: EXAMPLE_ONLY_LOCAL_REST_TOKEN
+      tenantId: local
+      conversationId: terminal
+      senderId: developer
+    routes:
+      - tenant: local
+        conversation: terminal
+        allowedSenders: [developer]
+        targets: [cluster-a, cluster-b]

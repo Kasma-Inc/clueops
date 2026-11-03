@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  checks:
+    name: Checks (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Prepare native sandbox tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends netcat-openbsd
+          # Codex's native Linux sandbox needs user namespaces on this disposable runner.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          unshare --user --map-root-user true
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Check demo configuration and Compose
+        run: |
+          npm start -- --check-config --config examples/demo/config.yaml
+          docker compose -f docker/compose.yaml config --quiet
+
+  integration:
+    name: Backend integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PG_TEST_IMAGE: postgres:18.1
+      REDIS_TEST_IMAGE: redis@sha256:a7efd4ed5037dcfe1543c0e50b9f06293d3e88827005544bf37f381eea5f01cf
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tools/dbhub/package-lock.json
+      - name: Install dependencies and pinned backends
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-venv postgresql-client
+          npm ci
+          node tools/install-backends.mjs
+      - name: Pull temporary database images
+        run: |
+          docker pull "$PG_TEST_IMAGE"
+          docker pull "$REDIS_TEST_IMAGE"
+      - run: npm run test:integration

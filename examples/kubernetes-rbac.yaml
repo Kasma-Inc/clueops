@@ -1,0 +1,39 @@
+# 由管理员在目标namespace创建；不要授予集群管理员或Secret权限。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: incident-reader
+  namespace: REPLACE_NAMESPACE
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: incident-reader
+  namespace: REPLACE_NAMESPACE
+rules:
+  - apiGroups: ['']
+    resources: [pods, pods/log, services, endpoints, events]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets]
+    verbs: [get, list]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: incident-reader
+  namespace: REPLACE_NAMESPACE
+subjects:
+  - kind: ServiceAccount
+    name: incident-reader
+    namespace: REPLACE_NAMESPACE
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: incident-reader

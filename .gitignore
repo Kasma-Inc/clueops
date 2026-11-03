@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src/generated/prompts/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+private/
+.private/
+.clueops/

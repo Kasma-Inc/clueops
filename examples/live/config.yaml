@@ -1,0 +1,75 @@
+# 全局配置模板：从项目根目录将 examples/live 整体复制为 private 后使用。
+# 启动入口由 --config private/config.yaml 指定，不会自动搜索此文件。
+# 填写 REPLACE_*；所有相对文件路径均以当前 YAML 所在目录为基准。
+# 环境专属的工具和连接写在 targets/*.yaml，本文件管理公共设置和授权。
+version: 1
+
+runtime:
+  # 调查记录、证据及默认插件状态；此路径最终位于项目根目录 .clueops/state。
+  stateDirectory: ../.clueops/state
+  # 默认只统计Token用量；需要上限时取消注释。只在全局配置，不放agent.config。
+  # maxModelTokens: 200000
+
+# 默认排障引擎，目标文件可用自己的 agent 覆盖。
+agent:
+  # 内置短名在 src/plugins/catalog.ts 注册，具体实现在 src/plugins/codex/。
+  plugin: codex
+  config:
+    # 填实际可用的模型名称；凭证和可选参数由该插件的 configSchema 定义。
+    model: REPLACE_WITH_AVAILABLE_MODEL
+    # 默认允许本地命令和 SSH 自主排查；需要关闭时显式设为 false。
+    localCommands: true
+    # 三选一：apiKey、apiKeyFile（纯Key文本）、authFile（Codex auth.json）。
+    # 复用已有登录态时删掉apiKey，改用authFile: ~/.codex/auth.json。
+    # Docker中建议authFile: ./credentials/codex-auth.json，认证刷新保存在state卷。
+    apiKey: REPLACE_OPENAI_API_KEY
+
+# 可选：注册已实现的外部插件。注册本身不会为任何目标启用工具。
+# plugins:
+#   custom-log: ./plugins/custom.mjs
+# 之后在目标 tools 中填写 plugin: custom-log；模块须预先部署。
+
+# 排障目标名 -> 配置文件。左侧名称也用于 Lark /target prod-a 和下方授权。
+# 只加载这里明确登记的文件，不会扫描整个 targets 目录。
+targets:
+  prod-a: ./targets/prod-a.yaml
+  # 按需登记其他环境；若配置了路由目标白名单，同步更新routes[].targets：
+  # prod-b: ./targets/prod-b.yaml
+
+# 渠道实例名 -> 插件及连接配置。整个Lark渠道可选。
+channels:
+  lark:
+    plugin: lark # [必填] 内置渠道插件；上面的lark是可自行命名的实例名。
+    # enabled: true # [可选] 默认true；false禁用，自动忽略本渠道路由。
+    # [二选一必填] config内联配置，或configFile引用独立文件。
+    config:
+      appId: cli_0000000000000000 # [必填] 实际Lark自建应用App ID。
+      appSecret: REPLACE_LARK_APP_SECRET # [二选一必填] 或appSecretFile: ./credentials/lark.secret。
+      # [可选] 不填时从认证消息事件取得租户，不需要提前收集ID。
+      # tenantId: REPLACE_TENANT_KEY
+      # [可选] 不填时启动自动查询机器人身份；显式填写可跳过查询。
+      # botOpenId: REPLACE_BOT_OPEN_ID
+    # [可选] 不配置routes：应用可收到的群/用户均可选择已登记目标。
+    # 多个目标时须明确/target；每次调查只装配所选目标的配置和工具。
+    # routes: [] 表示不授权任何来源且不启动渠道接收。
+    # 若需限制，按需取消注释；以下字段都可省略，省略表示该项不限。
+    # routes:
+    #   - targets: [prod-a] # 不填默认全部已登记目标；[]表示本规则不授权目标。
+    #     tenant: REPLACE_TENANT_KEY
+    #     conversation: REPLACE_CHAT_ID
+    #     allowedSenders: [REPLACE_USER_OPEN_ID] # 不填不限用户；[]表示本规则不授权用户。
+  # 可选REST渠道：与lark并列；只用REST时删除lark整个实例及其routes。
+  # http:
+  #   plugin: rest
+  #   config:
+  #     host: 127.0.0.1 # Docker内改为0.0.0.0，并仅向宿主回环地址发布端口。
+  #     port: 8080
+  #     tokenFile: ./credentials/rest.token # 或token: <至少16字符的随机Token>，二选一。
+  #     tenantId: local
+  #     conversationId: terminal
+  #     senderId: developer
+  #   routes:
+  #     - tenant: local
+  #       conversation: terminal
+  #       allowedSenders: [developer]
+  #       targets: [prod-a]
