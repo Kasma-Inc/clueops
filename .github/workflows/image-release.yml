@@ -69,6 +69,8 @@ jobs:
           file: docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          # Aliyun ACR rejects BuildKit's OCI attestation artifact format.
+          provenance: false
           tags: ${{ steps.image.outputs.ref }}
           cache-from: type=gha,scope=clueops-image
           cache-to: type=gha,mode=max,scope=clueops-image
