@@ -96,6 +96,13 @@ test('Codex selects exactly one credential source and resolves auth paths withou
   const parser = compileContract(codexPlugin.manifest.configSchema, 'codex config');
   for (const source of [{ apiKey: 'key' }, { apiKeyFile: './key' }, { authFile: './auth.json' }])
     parser.parse({ model: 'gpt-6', ...source });
+  for (const sandboxMode of ['restricted', 'danger-full-access'])
+    parser.parse({ model: 'gpt-6', apiKey: 'key', sandboxMode });
+  for (const config of [
+    { sandboxMode: 'invalid' },
+    { sandboxMode: 'danger-full-access', filesystem: { read: ['./data'] } },
+  ])
+    assert.throws(() => parser.parse({ model: 'gpt-6', apiKey: 'key', ...config }));
   for (const source of [
     {},
     { apiKey: 'key', authFile: './auth.json' },

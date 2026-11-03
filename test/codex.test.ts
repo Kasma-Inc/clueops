@@ -321,6 +321,10 @@ test(
     let large = false;
     let calls = 0;
     let toolCatalog = '';
+    let unrestricted = false;
+    const outside = path.join(f.root, 'outside-work.txt');
+    await writeFile(outside, 'OUTSIDE_WORK_OK');
+    const quotedOutside = "'" + outside.replaceAll("'", "'\\''") + "'";
     const api = createServer(async (req, res) => {
       let raw = '';
       for await (const chunk of req) raw += String(chunk);
@@ -346,7 +350,8 @@ test(
               arguments: JSON.stringify({
                 cmd: large
                   ? "i=0; while [ $i -lt 100000 ]; do printf 'line-%05d detail detail detail detail\\n' $i; i=$((i+1)); done; printf END_MARKER"
-                  : "printf 'NATIVE_OK password=SYNTHETIC_NATIVE_OUTPUT\\n'",
+                  : (unrestricted ? `cat ${quotedOutside}; ` : '') +
+                    "printf 'NATIVE_OK password=SYNTHETIC_NATIVE_OUTPUT\\n'",
                 max_output_tokens: 1000,
               }),
             }
@@ -405,8 +410,9 @@ test(
       api.closeAllConnections();
       api.close();
     });
-    for (const mode of ['small', 'large', 'disabled']) {
-      const localCommands = mode === 'disabled' ? false : undefined;
+    for (const mode of ['small', 'large', 'disabled', 'unrestricted', 'unrestricted-disabled']) {
+      const localCommands = mode.endsWith('disabled') ? false : undefined;
+      unrestricted = mode.startsWith('unrestricted');
       large = mode === 'large';
       enabled = localCommands !== false;
       calls = 0;
@@ -417,6 +423,7 @@ test(
           baseUrl: `http://127.0.0.1:${(api.address() as { port: number }).port}/v1`,
           model: 'gpt-6',
           ...(localCommands !== undefined ? { localCommands } : {}),
+          ...(unrestricted ? { sandboxMode: 'danger-full-access' as const } : {}),
           stateDirectory: `./${mode}-codex`,
         },
         {
@@ -468,6 +475,7 @@ test(
           } else {
             assert.equal(captured[0]!.status, 'ok', JSON.stringify(captured));
             assert.ok(JSON.stringify(captured[0]!).includes('NATIVE_OK'));
+            if (unrestricted) assert.ok(JSON.stringify(captured[0]!).includes('OUTSIDE_WORK_OK'));
           }
           assert.ok(!JSON.stringify(captured[0]!).includes('SYNTHETIC_NATIVE_OUTPUT'));
           assert.equal(calls, 3);

@@ -162,6 +162,23 @@ tools:
 
 目标顶层的 `skills` 则是公共配置：声明当前环境可用的技能包，由引擎插件负责接入各自的技能机制。支持技能的引擎声明 `supportsSkills`；不支持时，配置非空技能集合会明确报错。引擎专用的加载参数仍放在它自己的 `agent.config` 中。
 
+## Codex沙箱怎么配置
+
+`agent.config.sandboxMode` 默认是 `restricted`，保留目标目录权限和原生网络代理；沙箱启动失败会明确报错，不自动降级。Linux 环境需要允许 bubblewrap 创建用户命名空间。Codex 0.166.0 的旧版 Landlock 不支持这套文件读取限制，不能通过切换旧后端兼容禁用用户命名空间的节点。
+
+ACK 等无法调整节点参数的环境，可以显式关闭 Codex 内部沙箱：
+
+```yaml
+agent:
+  plugin: codex
+  config:
+    model: gpt-6.1-sol
+    authFile: ./credentials/codex-auth.json
+    sandboxMode: danger-full-access
+```
+
+该模式关闭内部文件系统隔离和命令网络代理，命令访问范围由容器及服务账号权限决定，容器内挂载的配置、凭证和其他目标状态也可能被命令读取。不能同时声明 `filesystem`，避免将未生效的目录授权误认为限制。`localCommands: false` 仍可关闭本地 Shell，但不恢复沙箱隔离。模式变化会改变会话范围，修改后重启并新建调查；需要包含此配置支持的新镜像，旧版镜像会拒绝该字段。
+
 ## Codex认证怎么配置
 
 在 `agent.config` 的 `apiKey`、`apiKeyFile`、`authFile` 中只选一项。`apiKeyFile` 读取纯Key文本，`authFile` 读取完整Codex认证JSON，并自动识别API Key缓存或ChatGPT登录态；其他登录模式、无效文件和混填明确报错，不回退到个人环境中的凭证。

@@ -115,11 +115,21 @@ test('filesystem grants resolve canonically, change scope and reject credentials
   const base = { apiKey: 'SYNTHETIC_KEY', model: 'gpt-6', stateDirectory: './state' };
   const a = await codexPlugin.create(base, context);
   const b = await codexPlugin.create({ ...base, filesystem: { read: ['./data'] } }, context);
+  const explicit = await codexPlugin.create({ ...base, sandboxMode: 'restricted' }, context);
+  const unrestricted = await codexPlugin.create(
+    { ...base, sandboxMode: 'danger-full-access' },
+    context,
+  );
   try {
     assert.notDeepEqual(a.scope, b.scope);
+    assert.deepEqual(a.scope, explicit.scope);
+    assert.notDeepEqual(a.scope, unrestricted.scope);
+    assert.deepEqual(unrestricted.scope.filesystem, { policy: 'danger-full-access' });
   } finally {
     await a.dispose();
     await b.dispose();
+    await explicit.dispose();
+    await unrestricted.dispose();
   }
 });
 

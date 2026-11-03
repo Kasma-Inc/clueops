@@ -47,7 +47,7 @@ docker compose -f docker/compose.yaml logs -f clueops
 docker run --rm clueops:local --check-config --config /app/examples/demo/config.yaml
 ```
 
-Compose配置了 `security_opt: [seccomp=unconfined]`，让非root用户可创建Codex内部bubblewrap所需的用户命名空间。这个设置撤掉外层Docker默认seccomp过滤，模型命令仍受Codex内部文件/网络权限和seccomp限制；没有启用privileged、额外capability或关闭AppArmor。宿主禁用用户命名空间或其他容器策略阻止原生隔离时会失败，应调整部署环境，不要改成全权限。自行用 `docker run` 执行真实Codex调查时也需要该security-opt；仅检查配置或运行离线fixture不需要。
+Compose配置了 `security_opt: [seccomp=unconfined]`，让非root用户可创建Codex内部bubblewrap所需的用户命名空间。这个设置撤掉外层Docker默认seccomp过滤，默认模式下模型命令仍受Codex内部文件/网络权限和seccomp限制；没有启用privileged、额外capability或关闭AppArmor。宿主禁用用户命名空间或其他容器策略阻止原生隔离时会失败。优先调整部署环境；ACK 等无法修改节点参数的环境，可在明确接受容器内访问权限后，显式配置 [`agent.config.sandboxMode: danger-full-access`](configuration.md#codex沙箱怎么配置)。默认隔离模式下，自行用 `docker run` 执行真实Codex调查也需要该security-opt；仅检查配置、运行离线fixture或显式关闭内部沙箱时不需要。
 
 容器中的目录对应关系：
 

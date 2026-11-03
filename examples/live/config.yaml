@@ -19,6 +19,8 @@ agent:
     model: REPLACE_WITH_AVAILABLE_MODEL
     # 默认允许本地命令和 SSH 自主排查；需要关闭时显式设为 false。
     localCommands: true
+    # 默认 restricted；ACK 等无法创建用户命名空间的环境可显式关闭内部沙箱。
+    # sandboxMode: danger-full-access
     # 三选一：apiKey、apiKeyFile（纯Key文本）、authFile（Codex auth.json）。
     # 复用已有登录态时删掉apiKey，改用authFile: ~/.codex/auth.json。
     # Docker中建议authFile: ./credentials/codex-auth.json，认证刷新保存在state卷。

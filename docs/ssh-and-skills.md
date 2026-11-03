@@ -6,6 +6,8 @@
 
 Codex 默认保留本地命令，使用[原生权限档](https://learn.chatgpt.com/docs/permissions)限制模型的文件操作：只有本调查的工作目录和临时目录可读写，已装配技能和必要运行文件只读，其余路径默认拒绝。其他目标配置、服务认证缓存和SSH私钥不授予模型读取权限；命令环境不继承模型或MCP入口的Token。原生网络代理阻止未授权本地socket；SSH认证由独立工具插件管理，不向模型装配SSH socket。无法启用这些权限时调查失败，不回退到全权限。宿主、Codex运行时和插件仍是可信代码，它们负责读取自己的配置及凭证。
 
+上述边界适用于默认 `sandboxMode: restricted`。无法创建用户命名空间的部署可以显式设置 [`sandboxMode: danger-full-access`](configuration.md#codex沙箱怎么配置)，关闭 Codex 内部文件系统隔离和命令网络代理；该模式不能同时使用下述 `filesystem` 授权。
+
 需要额外读取源码或写入导出目录时，在该目标的 `agent.config` 中显式声明：
 
 ```yaml

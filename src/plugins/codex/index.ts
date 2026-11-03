@@ -41,6 +41,7 @@ interface Config {
   reasoningEffort?: 'low' | 'medium' | 'high';
   launcher?: string;
   localCommands?: boolean;
+  sandboxMode?: 'restricted' | 'danger-full-access';
   filesystem?: FilesystemConfig;
 }
 interface Handle {
@@ -118,6 +119,7 @@ export default definePlugin<Config>({
           reasoningEffort: { enum: ['low', 'medium', 'high'] },
           launcher: text,
           localCommands: { type: 'boolean' },
+          sandboxMode: { enum: ['restricted', 'danger-full-access'] },
           filesystem: filesystemSchema,
         },
         ['model'],
@@ -126,6 +128,10 @@ export default definePlugin<Config>({
         properties: { [key]: {} },
         required: [key],
       })),
+      not: {
+        properties: { sandboxMode: { const: 'danger-full-access' }, filesystem: {} },
+        required: ['sandboxMode', 'filesystem'],
+      },
     },
   },
   async create(config, context) {
@@ -156,6 +162,7 @@ export default definePlugin<Config>({
     const root = config.stateDirectory
       ? context.resolvePath(config.stateDirectory)
       : (context.stateDirectory ?? context.resolvePath('.clueops/plugins/' + context.instanceId));
+    const unrestricted = config.sandboxMode === 'danger-full-access';
     let access: Awaited<ReturnType<typeof resolveFilesystem>>;
     const protectedPaths = [
       context.configFile,
@@ -311,13 +318,9 @@ export default definePlugin<Config>({
             }
             const pidFile = path.join(directory, 'run-' + randomUUID() + '.pid');
             pidFiles.push(pidFile);
-            const permissions = await permissionProfile({
-              home,
-              work,
-              temporary,
-              codexHome,
-              access,
-            });
+            const permissions = unrestricted
+              ? { config: {}, configOverrides: [] }
+              : await permissionProfile({ home, work, temporary, codexHome, access });
             const codex = new Codex({
               configOverrides: permissions.configOverrides,
               codexPathOverride: config.launcher
@@ -368,7 +371,7 @@ export default definePlugin<Config>({
                     }
                   : {},
                 features: {
-                  network_proxy: true,
+                  network_proxy: !unrestricted,
                   use_legacy_landlock: false,
                   shell_tool: config.localCommands !== false,
                   shell_snapshot: false,
@@ -403,6 +406,7 @@ export default definePlugin<Config>({
             });
             const threadOptions = {
               model: config.model,
+              ...(unrestricted ? { sandboxMode: 'danger-full-access' as const } : {}),
               workingDirectory: work,
               skipGitRepoCheck: true,
               approvalPolicy: 'never' as const,
@@ -559,7 +563,9 @@ export default definePlugin<Config>({
         tokenCounting:
           auth.kind === 'chatgpt' ? 'codex-thread-usage-delta' : 'responses/input_tokens',
         skillDiscovery: 'target-home-v1',
-        filesystem: { policy: 'target-directories-v2', ...access },
+        filesystem: unrestricted
+          ? { policy: 'danger-full-access' }
+          : { policy: 'target-directories-v2', ...access },
       },
       engine: {
         supportsNativeTools: config.localCommands !== false,
