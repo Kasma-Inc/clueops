@@ -2,7 +2,7 @@
 
 [返回项目首页](../README.md) · [部署与运行](deployment.md)
 
-推送 Git tag 后，[镜像发布工作流](../.github/workflows/image-release.yml)先调用现有 CI，验证该 tag 对应的提交。检查全部通过后，构建并推送 `linux/amd64`、`linux/arm64` 多架构镜像。
+推送 Git tag 后，[镜像发布工作流](../.github/workflows/image-release.yml)先调用现有 CI，验证该 tag 对应的提交。检查全部通过后，构建并推送 `linux/amd64` 镜像。
 
 ## Registry 配置
 
