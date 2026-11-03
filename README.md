@@ -1,8 +1,8 @@
-# ClueOps（寻迹）
+# clueops
 
 从日志线索到排障证据。
 
-ClueOps 是 TypeScript 插件式 AI 排障服务：通过 Lark 或 REST 接收日志，在用户获授权的目标内调用 Kubernetes、数据库、Redis、SSH 和 GitHub 工具，保存证据并返回可以继续追问的报告。
+clueops 是 TypeScript 插件式 AI 排障服务：通过 Lark 或 REST 接收日志，在用户获授权的目标内调用 Kubernetes、数据库、Redis、SSH 和 GitHub 工具，保存证据并返回可以继续追问的报告。
 
 - 按目标组合集群、数据库、代码仓库和排障知识，隔离连接与调查范围。
 - 引擎、诊断工具和消息渠道通过插件合同加载；当前内置 Codex 引擎。
