@@ -16,9 +16,11 @@ import { HostError } from '../../core/errors.js';
 import { fingerprint } from '../../core/identity.js';
 import { credential, credentialSchema, object, privateRedactor, text } from '../shared.js';
 import { RestMailbox } from './mailbox.js';
+import { managementResponse, serveAdmin } from './management.js';
 
 interface Config {
   readonly host?: string;
+  readonly admin?: boolean;
   readonly port?: number;
   readonly token?: string;
   readonly tokenFile?: string;
@@ -168,13 +170,39 @@ export class RestChannel implements MessageChannel {
     response: ServerResponse,
     handler: MessageHandler,
   ) {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    if (
+      this.config.admin &&
+      request.method === 'GET' &&
+      !url.search &&
+      (await serveAdmin(url.pathname, response))
+    )
+      return;
     if (!timingSafeEqual(digest(request.headers.authorization ?? ''), this.#token)) {
       response.setHeader('Connection', 'close');
       response.setHeader('WWW-Authenticate', 'Bearer');
       reply(response, 401, { error: 'UNAUTHORIZED' });
       return;
     }
-    const url = new URL(request.url ?? '/', 'http://localhost');
+    if (this.config.admin && url.pathname.startsWith('/api/')) {
+      if (request.method !== 'GET') return reply(response, 405, { error: 'METHOD_NOT_ALLOWED' });
+      try {
+        const result = await managementResponse(
+          url,
+          { ...this.#address, senderId: this.config.senderId },
+          this.#readAccess?.management,
+        );
+        return reply(response, 200, result);
+      } catch (error) {
+        if (error instanceof HostError) {
+          if (['ACCESS_DENIED', 'TARGET_SCOPE_CHANGED'].includes(error.code))
+            return reply(response, 403, { error: 'ACCESS_DENIED' });
+          if (error.code === 'INVALID_QUERY') return reply(response, 400, { error: error.code });
+          if (error.code === 'NOT_FOUND') return reply(response, 404, { error: error.code });
+        }
+        throw error;
+      }
+    }
     if (url.pathname !== '/messages') return reply(response, 404, { error: 'NOT_FOUND' });
     if (request.method === 'GET') {
       if (
@@ -253,6 +281,7 @@ export default definePlugin<Config>({
       {
         host: { enum: ['127.0.0.1', '0.0.0.0', '::1', '::'] },
         port: { type: 'integer', minimum: 0, maximum: 65535 },
+        admin: { type: 'boolean' },
         token: text,
         tokenFile: text,
         tenantId: text,

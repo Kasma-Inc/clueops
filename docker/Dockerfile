@@ -20,7 +20,7 @@ RUN node tools/install-backends.mjs
 COPY tsconfig.json ./
 COPY src ./src
 COPY prompts ./prompts
-COPY tools/build-prompts.mjs ./tools/build-prompts.mjs
+COPY tools/build-prompts.mjs tools/build-admin.mjs ./tools/
 RUN npm run build && npm prune --omit=dev
 
 FROM base AS runtime

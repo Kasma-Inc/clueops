@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && node tools/build-admin.mjs",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "test": "node --import tsx --test test/*.test.ts",
@@ -22,7 +22,9 @@
     "pretest": "node tools/build-prompts.mjs",
     "pretest:integration": "node tools/build-prompts.mjs",
     "prebenchmark": "node tools/build-prompts.mjs",
-    "precheck-config": "node tools/build-prompts.mjs"
+    "precheck-config": "node tools/build-prompts.mjs",
+    "test:admin-ui": "node tools/check-admin-ui.mjs",
+    "pretest:admin-ui": "npm run build"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

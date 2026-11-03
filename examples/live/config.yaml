@@ -64,6 +64,7 @@ channels:
   #   config:
   #     host: 127.0.0.1 # Docker内改为0.0.0.0，并仅向宿主回环地址发布端口。
   #     port: 8080
+  #     admin: true # 可选：开启同源 /admin/ 管理控制台，默认关闭。
   #     tokenFile: ./credentials/rest.token # 或token: <至少16字符的随机Token>，二选一。
   #     tenantId: local
   #     conversationId: terminal

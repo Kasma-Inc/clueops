@@ -3,6 +3,7 @@ import { validators } from '../plugin-api/index.js';
 import type {
   AgentEngine,
   ChannelReadAccess,
+  ChannelManagementAccess,
   InvestigationScope,
   MessageHandler,
   PluginScope,
@@ -201,9 +202,17 @@ export class PluginHost {
     );
   }
 
+  private readPrincipal(incoming: Principal, id: string): Principal {
+    this.assertOpen();
+    const principal = validators.principal.parse(incoming);
+    if (principal.channelInstanceId !== id) throw new HostError('CHANNEL_SOURCE_MISMATCH', id);
+    return principal;
+  }
+
   async start(
     handler: MessageHandler,
     authorizeRead?: ChannelReadAccess['authorizeInvestigation'],
+    management?: ChannelManagementAccess,
   ): Promise<void> {
     if (this.#phase !== 'prepared') throw new HostError('HOST_STATE_INVALID');
     this.#phase = 'starting';
@@ -234,12 +243,32 @@ export class PluginHost {
             this.#startAbort.signal,
             authorizeRead
               ? {
+                  ...(management
+                    ? {
+                        management: {
+                          listInvestigations: (incoming, query) =>
+                            management.listInvestigations(this.readPrincipal(incoming, id), query),
+                          getInvestigation: (incoming, investigationId, query) =>
+                            management.getInvestigation(
+                              this.readPrincipal(incoming, id),
+                              investigationId,
+                              query,
+                            ),
+                          listEvidence: (incoming, investigationId, turnId, offset, limit) =>
+                            management.listEvidence(
+                              this.readPrincipal(incoming, id),
+                              investigationId,
+                              turnId,
+                              offset,
+                              limit,
+                            ),
+                          listTargets: (incoming) =>
+                            management.listTargets(this.readPrincipal(incoming, id)),
+                        } satisfies ChannelManagementAccess,
+                      }
+                    : {}),
                   authorizeInvestigation: (incoming, investigationId) => {
-                    this.assertOpen();
-                    const principal = validators.principal.parse(incoming);
-                    if (principal.channelInstanceId !== id)
-                      throw new HostError('CHANNEL_SOURCE_MISMATCH', id);
-                    authorizeRead(principal, investigationId);
+                    authorizeRead(this.readPrincipal(incoming, id), investigationId);
                   },
                 }
               : undefined,

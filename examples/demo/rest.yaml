@@ -15,6 +15,7 @@ channels:
     config:
       host: 127.0.0.1
       port: 8080
+      admin: true
       # 仅用于离线示例，接真实环境时更换随机Token，或使用tokenFile。
       token: EXAMPLE_ONLY_LOCAL_REST_TOKEN
       tenantId: local

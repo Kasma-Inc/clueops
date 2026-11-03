@@ -9,3 +9,5 @@ src/generated/prompts/
 private/
 .private/
 .clueops/
+.playwright-cli/
+output/

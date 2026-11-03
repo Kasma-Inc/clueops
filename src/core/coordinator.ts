@@ -18,6 +18,7 @@ import { PluginHost } from './host.js';
 import { HostError, TargetSelectionRequired } from './errors.js';
 import { fingerprint, messageKey } from './identity.js';
 import { InvestigationStore } from './store.js';
+import { ManagementReader } from './management.js';
 import type { Acceptance, Delivery } from './store.js';
 import { SerialQueue } from './serial.js';
 import { Semaphore } from './semaphore.js';
@@ -57,22 +58,11 @@ export class InvestigationCoordinator {
     if (this.#closed) return;
     await this.reconcile();
     if (this.#closed) return;
+    const management = new ManagementReader(this.host, this.store);
     await this.host.start(
       (message, reception) => this.handle(message, reception),
-      (principal, investigationId) => {
-        const first = this.history(investigationId)[0];
-        if (
-          !first ||
-          fingerprint(first.request.message.address) !==
-            fingerprint({
-              channelInstanceId: principal.channelInstanceId,
-              tenantId: principal.tenantId,
-              conversationId: principal.conversationId,
-            })
-        )
-          throw new HostError('ACCESS_DENIED');
-        this.host.restore(principal, first.request.scope.target);
-      },
+      (principal, investigationId) => management.authorize(principal, investigationId),
+      management,
     );
     if (this.#closed) return;
     this.schedule();

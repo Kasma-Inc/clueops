@@ -96,3 +96,14 @@ PG 测试创建独立临时数据库实例并在结束后销毁；Docker镜像�
 这些许可证允许商业使用，分发仍须保留相应版权/许可证和适用声明；外部服务账号与 API 条款另行适用。2026-11-02 核对固定发布及维护仓库，主项目与 DBHub 生产依赖 `npm audit` 均为0。DBHub [只读绕过](https://github.com/advisories/GHSA-mwwr-p57h-56pf)与 [MySQL 注释绕过](https://github.com/bytebase/dbhub/security/advisories/GHSA-j656-3hf2-fvjc)公告的修复版本为0.22.6，当前1.5.0仍需数据库原生权限保护。GitHub [completion/complete DoS 公告](https://github.com/github/github-mcp-server/security/advisories/GHSA-w4q6-qw23-4rg7)页面未列修复版本；宿主在协议入口拒绝该方法，不提供任意 MCP 转发。核查记录不是以后升级的安全保证。SDK 0.166.0 声明文件引用旧 MCP SDK，开发依赖额外固定1.32.2用于类型检查；服务使用MCP2传输。
 
 实施进度见 [OpenSpec tasks](../openspec/changes/add-target-scoped-investigation/tasks.md)。
+
+
+## 管理控制台浏览器回归
+
+```sh
+npm run test:admin-ui
+```
+
+此命令先构建当前代码，再启动只提供静态资源的临时本地服务，通过 Playwright CLI 执行浏览器交互检查。需要 `npx` 和 Playwright CLI 可用的浏览器环境；首次运行时通过 `npx` 准备 CLI。与 `npm test` 分开运行，不要求模型、数据源或私有配置。
+
+浏览器脚本在 [admin-console.js](../test/browser/admin-console.js)，所有调查、证据、登录与追问请求都使用合成响应。覆盖手动筛选及未应用提示、分页与草稿保留、连续请求、轮询错误恢复、证据追加与延迟响应、追问幂等重试、失效目标、路由滚动、登录生命周期及窄屏布局。临时服务和浏览器在结束时关闭。

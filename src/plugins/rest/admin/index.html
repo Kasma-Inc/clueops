@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="clueops 排障管理控制台" />
+    <title>clueops</title>
+    <link rel="icon" href="/admin/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/admin/style.css" />
+    <script type="module" src="/admin/app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="#investigations" aria-label="clueops 首页"
+          ><span class="brand-mark">c</span><span>clueops<small>排障控制台</small></span></a
+        >
+        <div class="nav-label">工作空间</div>
+        <nav aria-label="主导航">
+          <a id="nav-investigations" href="#investigations"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 4h12v16H4V8m4-4v4H4m4-4L4 8m4 4h8m-8 4h6" /></svg
+            >排障记录</a
+          >
+          <a id="nav-targets" href="#targets"
+            ><svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="3" width="16" height="7" rx="2" />
+              <rect x="4" y="14" width="16" height="7" rx="2" />
+              <path d="M8 6.5h.01M8 17.5h.01M12 6.5h5M12 17.5h5" /></svg
+            >目标配置<span class="nav-tag">只读</span></a
+          >
+        </nav>
+        <div class="sidebar-foot">
+          <span class="small-dot"></span>配置修改后重启生效<small>clueops Management · v1</small>
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <span class="workspace-label"
+            >管理控制台<span class="divider">/</span><span id="location-label">登录</span></span
+          >
+          <div class="connection">
+            <span id="connection-state"><span class="small-dot muted-dot"></span>未登录</span
+            ><button id="disconnect" class="text-button" hidden>退出登录</button>
+          </div>
+        </header>
+        <main id="main" tabindex="-1">
+          <section id="connect-view" class="connect-wrap">
+            <div class="connect-card">
+              <span class="eyebrow">clueops CONSOLE</span>
+              <h1>让每一次排障<br />都有迹可循。</h1>
+              <p class="intro">在一个工作台中回看调查、追踪证据，<br />了解每个目标的排障范围。</p>
+              <div class="connect-rule"></div>
+              <h2>登录管理控制台</h2>
+              <p class="help">使用此 REST 入口配置的访问 Token 登录。</p>
+              <form id="connect-form">
+                <label for="token">访问 Token</label
+                ><input
+                  id="token"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  required
+                  placeholder="输入访问 Token"
+                />
+                <p id="connect-error" class="error-text" role="alert"></p>
+                <button id="connect-submit" class="button primary full" type="submit">
+                  登录控制台 <span aria-hidden="true">→</span>
+                </button>
+              </form>
+              <p class="connect-note">凭证仅保留在当前页面内存，刷新后需重新登录。</p>
+            </div>
+            <div class="connect-aside">
+              <span class="outline-mark">◎</span
+              ><span class="eyebrow">从问题，到证据，再到结论</span>
+              <ol>
+                <li>
+                  <span>01</span>
+                  <div>
+                    <strong>回看排障记录</strong>
+                    <p>按目标、状态检索历史调查。</p>
+                  </div>
+                </li>
+                <li>
+                  <span>02</span>
+                  <div>
+                    <strong>还原调查过程</strong>
+                    <p>阅读每一轮分析，核对证据并继续追问。</p>
+                  </div>
+                </li>
+                <li>
+                  <span>03</span>
+                  <div>
+                    <strong>明确目标范围</strong>
+                    <p>只读查看当前生效的引擎与工具配置。</p>
+                  </div>
+                </li>
+              </ol>
+            </div>
+          </section>
+          <div id="content" hidden></div>
+        </main>
+        <footer class="page-footer">
+          <span>clueops</span><span>调查与目标按当前入口权限展示</span>
+        </footer>
+      </div>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </body>
+</html>

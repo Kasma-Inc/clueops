@@ -1,3 +1,5 @@
+import type { ChannelManagementAccess } from './management.js';
+
 export type JsonValue = null | boolean | number | string | JsonObject | readonly JsonValue[];
 export interface JsonObject {
   readonly [key: string]: JsonValue;
@@ -309,6 +311,7 @@ export interface MessageChannel {
 /** Read-only authorization against the current principal, source and target scope. */
 export interface ChannelReadAccess {
   authorizeInvestigation(principal: Principal, investigationId: string): void;
+  readonly management?: ChannelManagementAccess;
 }
 
 export type CapabilityKind = 'engine' | 'tools' | 'channel';
