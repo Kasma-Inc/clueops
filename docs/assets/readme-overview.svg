@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="304" viewBox="0 0 1200 304" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">clueops：从线索到证据，再到结论</title>
+  <desc id="desc">三张相连的卡片分别代表提出问题并提供已有线索、在目标环境中收集证据，以及生成可以核对和继续追问的报告。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1200" y2="304" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0F8F5"/>
+      <stop offset="1" stop-color="#F7F9FA"/>
+    </linearGradient>
+    <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#B5D4CB" fill-opacity=".35"/>
+    </pattern>
+    <marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="m1 1 4 2.5L1 6" stroke="#087F70" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x=".5" y=".5" width="1199" height="303" rx="18" fill="url(#background)" stroke="#DFEAE6"/>
+  <rect x="1" y="1" width="1198" height="302" rx="18" fill="url(#dots)"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <text x="44" y="40" fill="#087F70" font-size="11" font-weight="700" letter-spacing="2.5">THE INVESTIGATION PATH</text>
+    <text x="1156" y="40" text-anchor="end" fill="#687C82" font-size="12">clueops / 从线索到结论</text>
+
+    <rect x="44" y="64" width="324" height="188" rx="12" fill="white" stroke="#DCE7E3"/>
+    <rect x="438" y="64" width="324" height="188" rx="12" fill="white" stroke="#9BCABE"/>
+    <rect x="832" y="64" width="324" height="188" rx="12" fill="white" stroke="#DCE7E3"/>
+    <path d="M380 158H424" stroke="#087F70" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <path d="M774 158H818" stroke="#087F70" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <text x="66" y="98" fill="#7A8C91" font-size="11" font-weight="600" letter-spacing="1.8">01 / SIGNAL</text>
+    <text x="66" y="133" fill="#253438" font-size="23" font-weight="650">从一个问题开始</text>
+    <rect x="66" y="152" width="280" height="48" rx="7" fill="#F6F8F9"/>
+    <circle cx="81" cy="168" r="3" fill="#CA8560"/>
+    <text x="92" y="172" fill="#52696F" font-family="'SFMono-Regular', Consolas, monospace" font-size="11">ERROR connection timeout</text>
+    <path d="M80 186H167M176 186H213M222 186H266" stroke="#D1DDDF" stroke-width="3" stroke-linecap="round"/>
+    <text x="66" y="229" fill="#687C82" font-size="13">问题描述 / 日志 / 告警</text>
+
+    <text x="460" y="98" fill="#087F70" font-size="11" font-weight="600" letter-spacing="1.8">02 / EVIDENCE</text>
+    <text x="460" y="133" fill="#253438" font-size="23" font-weight="650">连接环境中的证据</text>
+    <path d="M512 176H568M628 176H684" stroke="#AFD5CA" stroke-width="2"/>
+    <rect x="460" y="154" width="81" height="44" rx="7" fill="#F0F7F4"/>
+    <rect x="559" y="154" width="81" height="44" rx="7" fill="#E3F2EC"/>
+    <rect x="658" y="154" width="81" height="44" rx="7" fill="#F0F7F4"/>
+    <text x="500.5" y="181" text-anchor="middle" fill="#276558" font-size="13" font-weight="600">日志</text>
+    <text x="599.5" y="181" text-anchor="middle" fill="#276558" font-size="13" font-weight="600">数据</text>
+    <text x="698.5" y="181" text-anchor="middle" fill="#276558" font-size="13" font-weight="600">源码</text>
+    <text x="460" y="229" fill="#687C82" font-size="13">选择目标 / 调用工具 / 保存结果</text>
+
+    <text x="854" y="98" fill="#7A8C91" font-size="11" font-weight="600" letter-spacing="1.8">03 / INSIGHT</text>
+    <text x="854" y="133" fill="#253438" font-size="23" font-weight="650">让每个判断有迹可循</text>
+    <circle cx="864" cy="165" r="9" fill="#E6F5F0"/>
+    <path d="m860 165 3 3 5-6" stroke="#087F70" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="882" y="170" fill="#52696F" font-size="13">事实与推测分开，结论引用证据</text>
+    <path d="M855 191H1014M1025 191H1088" stroke="#D1DDDF" stroke-width="3" stroke-linecap="round"/>
+    <text x="854" y="229" fill="#687C82" font-size="13">核对报告 / 回看过程 / 继续追问</text>
+
+    <text x="600" y="280" text-anchor="middle" fill="#687C82" font-size="12" letter-spacing=".5">问题有上下文，分析有依据，调查可延续。</text>
+  </g>
+</svg>

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">clueops — 让每一次排障，都有迹可循。</title>
+  <desc id="desc">深绿色品牌封面。日志、数据库和源码三类线索相连，汇入一份引用证据的排障报告。</desc>
+  <defs>
+    <linearGradient id="bg" x2="1200" y2="480" gradientUnits="userSpaceOnUse"><stop stop-color="#0B2224"/><stop offset="1" stop-color="#113C36"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#4EBF9D" stop-opacity=".16"/><stop offset="1" stop-color="#4EBF9D" stop-opacity="0"/></radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" stroke="#9FD4C4" stroke-opacity=".045"/></pattern>
+    <linearGradient id="line" x1="662" y1="110" x2="662" y2="370" gradientUnits="userSpaceOnUse"><stop stop-color="#4C8979" stop-opacity=".3"/><stop offset="1" stop-color="#9AE3C7"/></linearGradient>
+  </defs>
+  <rect width="1200" height="480" rx="20" fill="url(#bg)"/>
+  <rect width="1200" height="480" rx="20" fill="url(#grid)"/>
+  <ellipse cx="942" cy="259" rx="330" ry="260" fill="url(#glow)"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <rect x="56" y="48" width="42" height="42" rx="12" fill="#9AE3C7"/>
+    <path d="M84 60a11 11 0 1 0 0 18M85 75l5 6" stroke="#123B34" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="78" cy="69" r="3" fill="#123B34"/>
+    <text x="112" y="80" fill="#F2FAF7" font-size="35" font-weight="700" letter-spacing="-1.2">clueops</text>
+    <text x="56" y="127" fill="#9CC6BB" font-size="11" font-weight="600" letter-spacing="2.6">AI INCIDENT INVESTIGATION</text>
+    <text x="54" y="199" fill="#F2FAF7" font-size="44" font-weight="650" letter-spacing="-.8">让每一次排障，</text>
+    <text x="54" y="259" fill="#9AE3C7" font-size="44" font-weight="650" letter-spacing="-.8">都有迹可循。</text>
+    <text x="56" y="306" fill="#B2CCC5" font-size="17">从日志、数据到源码，连接散落的线索。</text>
+    <text x="56" y="335" fill="#B2CCC5" font-size="17">收集证据，核对判断，继续追问。</text>
+
+    <g font-size="12" font-weight="500" fill="#C2DBD2">
+      <rect x="56" y="385" width="86" height="30" rx="15" fill="none" stroke="#36584F"/><text x="99" y="405" text-anchor="middle">TypeScript</text>
+      <rect x="152" y="385" width="66" height="30" rx="15" fill="none" stroke="#36584F"/><text x="185" y="405" text-anchor="middle">Codex</text>
+      <rect x="228" y="385" width="60" height="30" rx="15" fill="none" stroke="#36584F"/><text x="258" y="405" text-anchor="middle">MCP</text>
+      <rect x="298" y="385" width="108" height="30" rx="15" fill="none" stroke="#36584F"/><text x="352" y="405" text-anchor="middle">Lark + REST</text>
+    </g>
+
+    <text x="710" y="77" fill="#86B2A4" font-size="11" letter-spacing="2">FOLLOW THE EVIDENCE</text>
+    <path d="M710 137H672V397H710M710 223H672M710 309H672" stroke="url(#line)" stroke-width="1.5"/>
+    <circle cx="672" cy="223" r="4" fill="#9AE3C7"/>
+    <g>
+      <rect x="710" y="103" width="382" height="68" rx="10" fill="#173D37" stroke="#376357"/>
+      <rect x="726" y="121" width="34" height="32" rx="7" fill="#264C41"/>
+      <text x="743" y="142" text-anchor="middle" fill="#A9DFC4" font-size="12" font-weight="600">E1</text>
+      <text x="776" y="132" fill="#E0EEE8" font-size="16" font-weight="600">日志线索</text>
+      <text x="776" y="154" fill="#91B3A7" font-size="12">发生了什么，影响到哪些服务？</text>
+      <path d="m1051 135 5 5 9-10" stroke="#9AE3C7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <rect x="710" y="189" width="382" height="68" rx="10" fill="#173D37" stroke="#376357"/>
+      <rect x="726" y="207" width="34" height="32" rx="7" fill="#264C41"/>
+      <text x="743" y="228" text-anchor="middle" fill="#A9DFC4" font-size="12" font-weight="600">E2</text>
+      <text x="776" y="218" fill="#E0EEE8" font-size="16" font-weight="600">运行状态</text>
+      <text x="776" y="240" fill="#91B3A7" font-size="12">集群、数据库与缓存能说明什么？</text>
+      <path d="m1051 221 5 5 9-10" stroke="#9AE3C7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <rect x="710" y="275" width="382" height="68" rx="10" fill="#173D37" stroke="#376357"/>
+      <rect x="726" y="293" width="34" height="32" rx="7" fill="#264C41"/>
+      <text x="743" y="314" text-anchor="middle" fill="#A9DFC4" font-size="12" font-weight="600">E3</text>
+      <text x="776" y="304" fill="#E0EEE8" font-size="16" font-weight="600">源码依据</text>
+      <text x="776" y="326" fill="#91B3A7" font-size="12">代码路径是否支持当前判断？</text>
+      <path d="m1051 307 5 5 9-10" stroke="#9AE3C7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <rect x="710" y="367" width="382" height="60" rx="10" fill="#D8F0E4"/>
+    <circle cx="740" cy="397" r="10" stroke="#34755D" stroke-width="1.5"/>
+    <path d="M736 397h8M740 393v8" stroke="#34755D" stroke-width="1.5" stroke-linecap="round"/>
+    <text x="764" y="393" fill="#153F33" font-size="16" font-weight="650">有依据的报告，可延续的调查</text>
+    <text x="764" y="414" fill="#537B6B" font-size="12">事实 / 疑似原因 / 建议 / 缺失信息</text>
+  </g>
+</svg>

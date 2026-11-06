@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="790" viewBox="0 0 1200 790" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">clueops 系统架构</title>
+  <desc id="desc">Lark、REST 和经 REST 访问的管理控制台连接调查核心。核心负责授权、调度与持久化，Codex 结合目标知识选择工具，通过宿主记录证据后访问外部资源。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto-start-reverse"><path d="m1 1 4 2.5L1 6" stroke="#729A8C" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#CBDDD4" fill-opacity=".45"/></pattern>
+  </defs>
+  <rect x=".5" y=".5" width="1199" height="789" rx="18" fill="#F8FBF9" stroke="#DFE8E2"/>
+  <rect x="1" y="1" width="1198" height="788" rx="18" fill="url(#dots)"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <text x="44" y="42" fill="#087F70" font-size="11" font-weight="650" letter-spacing="2.5">SYSTEM ARCHITECTURE</text>
+    <text x="44" y="84" fill="#203932" font-size="28" font-weight="650">入口统一，调查独立，工具按目标装配。</text>
+    <text x="44" y="115" fill="#6B8077" font-size="15">从接收问题到保存证据，各层有明确分工；增加新能力，通过插件接入。</text>
+
+    <g stroke="#94B4A7" stroke-width="1.5" marker-end="url(#arrow)">
+      <path d="M208 239V282"/>
+      <path d="M600 239V282"/>
+      <path d="M992 239V282"/>
+      <path d="M600 376V424" marker-start="url(#arrow)"/>
+      <path d="M992 376V424" marker-start="url(#arrow)"/>
+      <path d="M372 482H434"/>
+      <path d="M600 540V614" marker-start="url(#arrow)"/>
+    </g>
+    <g>
+      <rect x="44" y="155" width="328" height="84" rx="10" fill="white" stroke="#D7E4DD"/>
+      <rect x="436" y="155" width="328" height="84" rx="10" fill="white" stroke="#D7E4DD"/>
+      <rect x="828" y="155" width="328" height="84" rx="10" fill="white" stroke="#D7E4DD"/>
+      <g fill="#253E34" font-size="19" font-weight="650">
+        <text x="66" y="190">Lark 群聊</text><text x="458" y="190">REST API</text><text x="850" y="190">管理控制台</text>
+      </g>
+      <g fill="#75877E" font-size="14">
+        <text x="66" y="216">问题描述 · 告警原文 · 卡片回复</text><text x="458" y="216">脚本接入 · 提交问题 · 查询回复</text><text x="850" y="216">经 REST 查看历史、证据并追问</text>
+      </g>
+    </g>
+
+    <rect x="44" y="284" width="1112" height="92" rx="12" fill="#123F35"/>
+    <text x="66" y="319" fill="#9CCDBC" font-size="11" font-weight="600" letter-spacing="1.6">INVESTIGATION CORE</text>
+    <text x="66" y="350" fill="#F0FAF4" font-size="24" font-weight="650">调查核心</text>
+    <text x="350" y="322" fill="#E0F0E7" font-size="16">目标授权 / 消息去重 / 顺序与并发 / 超时与预算</text>
+    <text x="350" y="350" fill="#A4C7B7" font-size="14">保存问题、证据与报告，管理中断恢复和消息投递</text>
+
+    <rect x="44" y="426" width="328" height="114" rx="10" fill="white" stroke="#D7E4DD"/>
+    <rect x="436" y="426" width="328" height="114" rx="10" fill="#E7F4EC" stroke="#99C6AF"/>
+    <rect x="828" y="426" width="328" height="114" rx="10" fill="white" stroke="#D7E4DD"/>
+    <g font-size="19" font-weight="650" fill="#253E34">
+      <text x="66" y="460">目标知识与技能</text><text x="458" y="460">Codex 引擎插件</text><text x="850" y="460">本地持久状态</text>
+    </g>
+    <g font-size="14" fill="#6B8077">
+      <text x="66" y="489">knowledge：环境背景与约定</text><text x="66" y="513">skills：按需读取的排障方法</text>
+      <text x="458" y="489">分析问题，选择当前可用工具</text><text x="458" y="513">生成事实、推测和下一步建议</text>
+      <text x="850" y="489">问题 · 证据 · 报告 · 会话</text><text x="850" y="513">投递记录 · 重启恢复 · 历史清理</text>
+    </g>
+    <rect x="476" y="564" width="248" height="24" rx="12" fill="#F8FBF9"/>
+    <text x="600" y="581" text-anchor="middle" fill="#6B8077" font-size="13">通过宿主调用工具并记录证据</text>
+
+    <rect x="44" y="616" width="1112" height="112" rx="12" fill="white" stroke="#D7E4DD"/>
+    <text x="66" y="646" fill="#087F70" font-size="11" font-weight="650" letter-spacing="1.7">TARGET-SCOPED TOOLS</text>
+    <g fill="#253E34" font-size="17" font-weight="600">
+      <text x="66" y="679">Kubernetes</text><text x="290" y="679">数据库</text><text x="514" y="679">Redis</text><text x="738" y="679">SSH</text><text x="962" y="679">GitHub</text>
+    </g>
+    <g fill="#75877E" font-size="13">
+      <text x="66" y="705">集群、资源与容器日志</text><text x="290" y="705">结构、数据与运行活动</text><text x="514" y="705">缓存状态与有限数据读取</text><text x="738" y="705">远程服务器与命令输出</text><text x="962" y="705">代码搜索与版本读取</text>
+    </g>
+    <path d="M268 660V709M492 660V709M716 660V709M940 660V709" stroke="#E3ECE6"/>
+    <text x="600" y="762" text-anchor="middle" fill="#75877E" font-size="13">每次调查只使用所选目标的引擎、工具、知识和技能；外部资源权限由对应账号落实。</text>
+  </g>
+</svg>
